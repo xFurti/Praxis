@@ -11,10 +11,10 @@
 
 ## 2. PRE-BUILD Shell Foundations
 
-- [ ] 2.1 Inizializzare l'app frontend con React, Vite, TypeScript e TailwindCSS, definendo una struttura component-based coerente con shell, finestre, panel e runtime
-- [ ] 2.2 Implementare il layout full-screen della shell Praxis con desktop dark navy, top bar con logo Praxis e prompt bar centrata in basso con il copy MVP richiesto
-- [ ] 2.3 Definire il linguaggio visivo tech-magic con gradienti cyan-violet, tipografia, superfici e token CSS/Tailwind riutilizzabili
-- [ ] 2.4 Creare il design system Praxis con classi condivise come `.praxis-btn`, `.praxis-card`, `.praxis-input`, `.praxis-display` e relative linee guida d'uso
+- [x] 2.1 Inizializzare l'app frontend con React, Vite, TypeScript e TailwindCSS, definendo una struttura component-based coerente con shell, finestre, panel e runtime
+- [x] 2.2 Implementare il layout full-screen della shell Praxis con desktop dark navy, top bar con logo Praxis e prompt bar centrata in basso con il copy MVP richiesto
+- [x] 2.3 Definire il linguaggio visivo tech-magic con gradienti cyan-violet, tipografia, superfici e token CSS/Tailwind riutilizzabili
+- [x] 2.4 Creare il design system Praxis con classi condivise come `.praxis-btn`, `.praxis-card`, `.praxis-input`, `.praxis-display` e relative linee guida d'uso
 
 ## 3. PRE-BUILD Windowing And Runtime Scaffold
 

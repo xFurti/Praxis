@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-praxis-navy text-praxis-text font-sans antialiased;
+  background-image: theme('backgroundImage.navy-radial');
+  background-attachment: fixed;
+  overflow: hidden;
+}
+
+/* ---------- Praxis Design System ----------
+   Shared visual contract used by the shell AND the BUILDER agent output.
+   Generated apps must use these classes for common controls.
+------------------------------------------- */
+
+@layer components {
+  .praxis-display {
+    @apply font-display tracking-tight text-praxis-text;
+    text-shadow: 0 0 18px rgba(139, 92, 246, 0.25);
+  }
+
+  .praxis-card {
+    @apply rounded-xl border border-praxis-edge/80 bg-praxis-surface/80 backdrop-blur-md shadow-window;
+  }
+
+  .praxis-input {
+    @apply w-full rounded-lg border border-praxis-edge/80 bg-praxis-navy2/80 px-4 py-2.5
+      text-praxis-text placeholder:text-praxis-muted/70 outline-none transition
+      focus:border-praxis-cyan/70 focus:shadow-glow;
+  }
+
+  .praxis-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-medium
+      transition select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .praxis-btn-primary {
+    @apply praxis-btn text-praxis-navy bg-tech-magic shadow-glow
+      hover:brightness-110 active:brightness-95;
+  }
+
+  .praxis-btn-ghost {
+    @apply praxis-btn text-praxis-text/90 bg-praxis-surface2/60 border border-praxis-edge/70
+      hover:bg-praxis-surface2 hover:border-praxis-cyan/50;
+  }
+
+  .praxis-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-praxis-edge/70
+      bg-praxis-surface2/60 px-2.5 py-1 text-xs text-praxis-muted;
+  }
+
+  .praxis-divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-praxis-edge to-transparent;
+  }
+
+  .praxis-streaming {
+    background: linear-gradient(
+      90deg,
+      rgba(34, 211, 238, 0) 0%,
+      rgba(34, 211, 238, 0.18) 50%,
+      rgba(34, 211, 238, 0) 100%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+}
+
+/* Thin scrollbars inside the shell */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(36, 48, 86, 0.8);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
