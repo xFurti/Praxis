@@ -26,11 +26,11 @@
 
 ## 4. PRE-BUILD Backend And Comparison Scaffold
 
-- [ ] 4.1 Inizializzare il backend Node/Express con struttura minima, configurazione ambiente e separazione chiara fra API server e client
-- [ ] 4.2 Implementare un placeholder di `callModel({ role, messages, stream })` che legga provider e model da variabili d'ambiente ma possa restituire risposte mock in assenza di integrazione reale
-- [ ] 4.3 Definire endpoint backend stub per interpretazione, build e fix che rispettino gia' il contratto multi-ruolo senza dipendere da provider live
-- [ ] 4.4 Implementare il pannello `Speed Compare` nella shell con layout finale e dati placeholder per provider veloce vs provider lento
-- [ ] 4.5 Verificare il flusso PRE-BUILD end-to-end: prompt mock -> finestra generata -> iframe visibile -> pannello Speed renderizzato
+- [x] 4.1 Inizializzare il backend Node/Express con struttura minima, configurazione ambiente e separazione chiara fra API server e client
+- [x] 4.2 Implementare un placeholder di `callModel({ role, messages, stream })` che legga provider e model da variabili d'ambiente ma possa restituire risposte mock in assenza di integrazione reale
+- [x] 4.3 Definire endpoint backend stub per interpretazione, build e fix che rispettino gia' il contratto multi-ruolo senza dipendere da provider live
+- [x] 4.4 Implementare il pannello `Speed Compare` nella shell con layout finale e dati placeholder per provider veloce vs provider lento
+- [x] 4.5 Verificare il flusso PRE-BUILD end-to-end: prompt mock -> finestra generata -> iframe visibile -> pannello Speed renderizzato
 
 ## 5. CORE Prompting And Provider Integration
 
