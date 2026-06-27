@@ -1,11 +1,11 @@
 ## 1. Repository Setup And Guardrails
 
-- [ ] 1.1 Inizializzare Git nel progetto, creare il branch `main`, creare il branch `prebuild`, e creare il repository GitHub remoto per Praxis
-- [ ] 1.2 Creare `.gitignore` iniziale includendo almeno `.env`, `.env.*`, `node_modules/`, output di build, file temporanei e verificare che `.env` non sia tracciato
-- [ ] 1.3 Creare un `README.md` iniziale che descriva Praxis, la distinzione PRE-BUILD vs CORE e il requisito che le chiavi API restino solo nel backend
-- [ ] 1.4 Aggiungere una regola operativa al flusso di lavoro del progetto: prima di ogni commit verificare che `.gitignore` protegga `.env` e che nessuna chiave API o secret sia staged
-- [ ] 1.5 Verificare che la cartella `openspec/` sia versionata insieme agli artifact del change come prova del processo di sviluppo
-- [ ] 1.6 Dopo il completamento di ciascun task eseguire un commit atomico con conventional commit, usando prefisso `[prebuild]` per i task di scaffolding e `[core]` per i task hackathon
+- [x] 1.1 Inizializzare Git nel progetto, creare il branch `main`, creare il branch `prebuild`, e creare il repository GitHub remoto per Praxis
+- [x] 1.2 Creare `.gitignore` iniziale includendo almeno `.env`, `.env.*`, `node_modules/`, output di build, file temporanei e verificare che `.env` non sia tracciato
+- [x] 1.3 Creare un `README.md` iniziale che descriva Praxis, la distinzione PRE-BUILD vs CORE e il requisito che le chiavi API restino solo nel backend
+- [x] 1.4 Aggiungere una regola operativa al flusso di lavoro del progetto: prima di ogni commit verificare che `.gitignore` protegga `.env` e che nessuna chiave API o secret sia staged
+- [x] 1.5 Verificare che la cartella `openspec/` sia versionata insieme agli artifact del change come prova del processo di sviluppo
+- [x] 1.6 Dopo il completamento di ciascun task eseguire un commit atomico con conventional commit, usando prefisso `[prebuild]` per i task di scaffolding e `[core]` per i task hackathon
 - [ ] 1.7 Creare il commit marcatore vuoto `"[core] HACKATHON START"` con `git commit --allow-empty` all'inizio del lavoro CORE
 - [ ] 1.8 Creare il commit marcatore vuoto `"[core] HACKATHON END"` con `git commit --allow-empty` alla chiusura del lavoro CORE
 
