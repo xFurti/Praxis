@@ -18,11 +18,11 @@
 
 ## 3. PRE-BUILD Windowing And Runtime Scaffold
 
-- [ ] 3.1 Modellare lo stato del window manager per id finestra, titolo, bounds, z-index, stato minimizzato, stato generazione e contenuto HTML
-- [ ] 3.2 Implementare componenti finestra con titolo, controlli minimizza/chiudi, focus, drag e resize in modo stabile sia su desktop che su viewport ridotti
-- [ ] 3.3 Implementare il runtime delle app generate tramite `iframe srcdoc` sandboxato senza iniettare HTML generato nel DOM della shell
-- [ ] 3.4 Aggiungere una pipeline mock di generazione che crei una finestra app e mostri una progressione visiva di scrittura anche senza provider reale
-- [ ] 3.5 Definire il contratto dati frontend per richieste utente, spec interpretata, documento HTML generato e storico errori/fix
+- [x] 3.1 Modellare lo stato del window manager per id finestra, titolo, bounds, z-index, stato minimizzato, stato generazione e contenuto HTML
+- [x] 3.2 Implementare componenti finestra con titolo, controlli minimizza/chiudi, focus, drag e resize in modo stabile sia su desktop che su viewport ridotti
+- [x] 3.3 Implementare il runtime delle app generate tramite `iframe srcdoc` sandboxato senza iniettare HTML generato nel DOM della shell
+- [x] 3.4 Aggiungere una pipeline mock di generazione che crei una finestra app e mostri una progressione visiva di scrittura anche senza provider reale
+- [x] 3.5 Definire il contratto dati frontend per richieste utente, spec interpretata, documento HTML generato e storico errori/fix
 
 ## 4. PRE-BUILD Backend And Comparison Scaffold
 
