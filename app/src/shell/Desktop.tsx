@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useWindowManager } from '../windows/useWindowManager'
 import { AppWindowFrame } from '../windows/AppWindowFrame'
+import { InteractionProvider } from '../windows/interactionContext'
 import { AppFrame } from '../runtime/AppFrame'
 import { startMockGeneration, type MockGenHandle } from '../runtime/mockGeneration'
 
@@ -34,7 +35,7 @@ export function Desktop() {
   }, [generate])
 
   return (
-    <>
+    <InteractionProvider>
       {wm.windows.map((w) => (
         <AppWindowFrame
           key={w.id}
@@ -51,7 +52,7 @@ export function Desktop() {
           <AppFrame win={w} />
         </AppWindowFrame>
       ))}
-    </>
+    </InteractionProvider>
   )
 }
 

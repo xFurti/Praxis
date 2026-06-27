@@ -1,5 +1,6 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import type { AppWindow, WindowBounds } from '../data/types'
+import { useInteraction } from './interactionContext'
 
 type AppWindowFrameProps = {
   win: AppWindow
@@ -10,6 +11,8 @@ type AppWindowFrameProps = {
   children?: React.ReactNode
 }
 
+type DragMode = 'drag' | 'resize'
+
 export function AppWindowFrame({
   win,
   onFocus,
@@ -18,25 +21,22 @@ export function AppWindowFrame({
   onBoundsChange,
   children,
 }: AppWindowFrameProps) {
-  const mode = useRef<'drag' | 'resize' | null>(null)
+  const interaction = useInteraction()
+  const mode = useRef<DragMode | null>(null)
   const start = useRef<{ x: number; y: number; bounds: WindowBounds }>({
     x: 0,
     y: 0,
     bounds: win.bounds,
   })
 
-  const onPointerMove = (e: ReactPointerEvent) => {
+  const move = (e: ReactPointerEvent) => {
     if (!mode.current) return
     e.preventDefault()
     const { x, y, bounds } = start.current
     const dx = e.clientX - x
     const dy = e.clientY - y
     if (mode.current === 'drag') {
-      onBoundsChange(win.id, {
-        ...bounds,
-        x: bounds.x + dx,
-        y: bounds.y + dy,
-      })
+      onBoundsChange(win.id, { ...bounds, x: bounds.x + dx, y: bounds.y + dy })
     } else {
       onBoundsChange(win.id, {
         ...bounds,
@@ -46,21 +46,19 @@ export function AppWindowFrame({
     }
   }
 
-  const endDrag = () => {
+  const end = () => {
+    if (!mode.current) return
     mode.current = null
+    interaction.end()
   }
 
-  const beginDrag = (e: ReactPointerEvent) => {
-    onFocus(win.id)
-    mode.current = 'drag'
-    start.current = { x: e.clientX, y: e.clientY, bounds: { ...win.bounds } }
-  }
-
-  const beginResize = (e: ReactPointerEvent) => {
+  const begin = (e: ReactPointerEvent, m: DragMode) => {
     e.stopPropagation()
     onFocus(win.id)
-    mode.current = 'resize'
+    mode.current = m
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     start.current = { x: e.clientX, y: e.clientY, bounds: { ...win.bounds } }
+    interaction.begin()
   }
 
   if (win.minimized) return null
@@ -70,13 +68,13 @@ export function AppWindowFrame({
       className="praxis-card absolute flex flex-col"
       style={{ left: win.bounds.x, top: win.bounds.y, width: win.bounds.width, height: win.bounds.height, zIndex: win.zIndex }}
       onPointerDown={() => onFocus(win.id)}
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerLeave={endDrag}
     >
       <div
         className="flex h-9 shrink-0 cursor-grab items-center justify-between border-b border-praxis-edge/70 px-3 active:cursor-grabbing"
-        onPointerDown={beginDrag}
+        onPointerDown={(e) => begin(e, 'drag')}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
       >
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-praxis-text">{win.title}</span>
@@ -108,7 +106,10 @@ export function AppWindowFrame({
 
       <div
         className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
-        onPointerDown={beginResize}
+        onPointerDown={(e) => begin(e, 'resize')}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
       />
     </div>
   )
