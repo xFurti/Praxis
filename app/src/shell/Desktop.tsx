@@ -5,6 +5,7 @@ import { InteractionProvider } from '../windows/interactionContext'
 import { AppFrame } from '../runtime/AppFrame'
 import { startFixGeneration, startLiveGeneration, type LiveGenHandle } from '../runtime/liveGeneration'
 import { AgentOverlay } from '../agents/AgentOverlay'
+import { Taskbar } from './Taskbar'
 
 declare global {
   interface Window {
@@ -99,23 +100,34 @@ export function Desktop() {
 
   return (
     <InteractionProvider>
-      <AgentOverlay activeWindow={activeWorkflowWindow} />
-      {wm.windows.map((w) => (
-        <AppWindowFrame
-          key={w.id}
-          win={w}
-          onFocus={wm.focus}
-          onMinimize={wm.minimize}
+      <div className="relative h-full w-full">
+        <AgentOverlay activeWindow={activeWorkflowWindow} />
+        {wm.windows.map((w) => (
+          <AppWindowFrame
+            key={w.id}
+            win={w}
+            onFocus={wm.focus}
+            onMinimize={wm.minimize}
+            onClose={(id) => {
+              handles.current.get(id)?.cancel()
+              handles.current.delete(id)
+              wm.close(id)
+            }}
+            onBoundsChange={wm.setBounds}
+          >
+            <AppFrame win={w} />
+          </AppWindowFrame>
+        ))}
+        <Taskbar
+          windows={wm.windows}
+          onRestore={wm.focus}
           onClose={(id) => {
             handles.current.get(id)?.cancel()
             handles.current.delete(id)
             wm.close(id)
           }}
-          onBoundsChange={wm.setBounds}
-        >
-          <AppFrame win={w} />
-        </AppWindowFrame>
-      ))}
+        />
+      </div>
     </InteractionProvider>
   )
 }
