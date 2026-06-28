@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { TopBar } from './TopBar'
 import { PromptBar } from './PromptBar'
 import { Desktop } from './Desktop'
@@ -28,34 +28,45 @@ export function Shell({ onPrompt }: ShellProps) {
     return () => window.removeEventListener('praxis-tokens', handler)
   }, [])
 
-  // Reset building state when all windows are ready/idle
-  useEffect(() => {
-    const check = () => {
-      const windows = (window as any).__praxisWindows as any[] | undefined
-      if (windows && windows.some((w: any) => w.status === 'building' || w.status === 'interpreting' || w.status === 'fixing')) {
-        return
-      }
+  // Track building state — set true on prompt, reset on complete or timeout
+  const resetBuilding = useRef<number | null>(null)
+  const handlePromptWithTracking = (prompt: string, screenshot?: string) => {
+    onPrompt?.(prompt)
+    setIsBuilding(true)
+    setLiveTokens({ fast: 0, slow: null })
+    if (resetBuilding.current) clearTimeout(resetBuilding.current)
+    resetBuilding.current = window.setTimeout(() => {
       setIsBuilding(false)
+    }, 30000) // auto-reset after 30s max
+    window.__praxisGenerate?.(prompt, screenshot)
+  }
+
+  // Reset building state when generation completes
+  useEffect(() => {
+    const handler = () => {
+      setIsBuilding(false)
+      if (resetBuilding.current) clearTimeout(resetBuilding.current)
     }
-    const id = setInterval(check, 1000)
-    return () => clearInterval(id)
+    window.addEventListener('praxis-build-complete', handler)
+    return () => {
+      window.removeEventListener('praxis-build-complete', handler)
+      if (resetBuilding.current) clearTimeout(resetBuilding.current)
+    }
   }, [])
 
   // Merge live tokens into provider list during build
-  const effectiveProviders = providers?.map((p) => {
-    if (p.id === 'fast' && isBuilding && liveTokens.fast > 0) {
-      return { ...p, tokenPerSec: liveTokens.fast, status: 'measuring' as const }
-    }
-    if (p.id === 'slow' && isBuilding && liveTokens.slow != null && liveTokens.slow > 0) {
-      return { ...p, tokenPerSec: liveTokens.slow, status: 'measuring' as const }
-    }
-    return p
-  })
-
-  const handlePrompt = (prompt: string, screenshot?: string) => {
-    onPrompt?.(prompt)
-    window.__praxisGenerate?.(prompt, screenshot)
-  }
+  const effectiveProviders = useMemo(() => {
+    if (!providers) return providers
+    return providers.map((p) => {
+      if (p.id === 'fast' && isBuilding && liveTokens.fast > 0) {
+        return { ...p, tokenPerSec: liveTokens.fast, status: 'measuring' as const }
+      }
+      if (p.id === 'slow' && isBuilding && liveTokens.slow != null && liveTokens.slow > 0) {
+        return { ...p, tokenPerSec: liveTokens.slow, status: 'measuring' as const }
+      }
+      return p
+    })
+  }, [providers, isBuilding, liveTokens])
 
   useEffect(() => {
     const loadCapabilities = async () => {
@@ -107,7 +118,7 @@ export function Shell({ onPrompt }: ShellProps) {
           </div>
         </div>
 
-        <PromptBar onSubmit={handlePrompt} multimodal={multimodal} />
+        <PromptBar onSubmit={handlePromptWithTracking} multimodal={multimodal} />
       </main>
     </div>
   )

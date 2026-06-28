@@ -73,8 +73,22 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
     html = await ensureValidHtml(html, 'Generated HTML failed validation.', signal)
     html = withRuntimeMonitor(html, win.id)
     onHtml(win.id, html)
+
+    // Measure the actual content size and resize the window to fit it tightly
+    const measured = await measureContentSize(win.id, signal)
+    if (measured) {
+      onUpdate(win.id, {
+        bounds: {
+          ...win.bounds,
+          width: measured.width,
+          height: measured.height,
+        },
+      })
+    }
+
     onStatus(win.id, 'ready')
     onTokensPerSec?.(finalTokPerSec, null)
+    window.dispatchEvent(new Event('praxis-build-complete'))
   } catch (error) {
     if (signal.aborted) {
       return
@@ -335,8 +349,8 @@ function validateGeneratedHtml(html: string) {
 }
 
 function withRuntimeMonitor(html: string, windowId: string) {
-  // Only inject error tracking — no auto-resize
-  const monitor = `<script>(function(){if(window.__praxisRuntimeMonitorInstalled)return;window.__praxisRuntimeMonitorInstalled=true;function send(error){try{parent.postMessage({windowId:${JSON.stringify(windowId)},type:'praxis-runtime-error',error:String(error||'Unknown runtime error')},'*')}catch(_e){}}window.addEventListener('error',function(event){send(event.message||(event.error&&event.error.message)||'Runtime error')});window.addEventListener('unhandledrejection',function(event){var reason=event.reason;send(reason&&reason.message?reason.message:String(reason||'Unhandled promise rejection'))});})();</script>`
+  // Error tracking + one-time size measurement on load
+  const monitor = `<script>(function(){if(window.__praxisRuntimeMonitorInstalled)return;window.__praxisRuntimeMonitorInstalled=true;function post(p){try{parent.postMessage(Object.assign({windowId:${JSON.stringify(windowId)}},p),'*')}catch(e){}}function send(e){post({type:'praxis-runtime-error',error:String(e||'Unknown runtime error')})}function measure(){try{var b=document.body,d=document.documentElement,bs=b?window.getComputedStyle(b):null,p=function(v){var n=parseFloat(v||'0');return isFinite(n)?n:0},pL=p(bs?bs.paddingLeft:'0'),pR=p(bs?bs.paddingRight:'0'),pT=p(bs?bs.paddingTop:'0'),pB=p(bs?bs.paddingBottom:'0'),sw=Math.max(b?b.scrollWidth:0,d?d.scrollWidth:0,b?b.offsetWidth:0),sh=Math.max(b?b.scrollHeight:0,d?d.scrollHeight:0,b?b.offsetHeight:0);post({type:'praxis-measured-size',width:Math.ceil(sw+pL+pR+16),height:Math.ceil(sh+pT+pB+16)})}catch(e){}}window.addEventListener('error',function(e){send(e.message||(e.error&&e.error.message)||'Runtime error')});window.addEventListener('unhandledrejection',function(e){var r=e.reason;send(r&&r.message?r.message:String(r||'Unhandled promise rejection'))});if(document.readyState==='complete'){measure()}else{window.addEventListener('load',function(){setTimeout(measure,200)})}setTimeout(measure,500);setTimeout(measure,1000);})();</script>`
 
   if (html.includes('praxis-runtime-error')) {
     return html
@@ -369,6 +383,35 @@ function escapeHtml(text: string) {
 
 function estimateTokens(text: string) {
   return Math.max(1, Math.ceil(String(text || '').length / 4))
+}
+
+async function measureContentSize(windowId: string, signal: AbortSignal): Promise<{ width: number; height: number } | null> {
+  return new Promise<{ width: number; height: number } | null>((resolve) => {
+    const handler = (e: MessageEvent) => {
+      const data = e.data as { type?: string; windowId?: string; width?: number; height?: number }
+      if (data?.type === 'praxis-measured-size' && data.windowId === windowId) {
+        window.removeEventListener('message', handler)
+        resolve({ width: data.width!, height: data.height! })
+      }
+    }
+    window.addEventListener('message', handler)
+
+    // Timeout after 2 seconds — fall back to default size
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', handler)
+      resolve(null)
+    }, 2000)
+
+    // Dispatch a custom event that the iframe can listen for
+    // The iframe will measure its content and post back the size
+    // We rely on the runtime monitor script already being injected
+    // Just wait a bit and if no response, resolve null
+    signal.addEventListener('abort', () => {
+      clearTimeout(timeout)
+      window.removeEventListener('message', handler)
+      resolve(null)
+    })
+  })
 }
 
 function boundsForWindowSize(size: AppSpec['window_size']) {
