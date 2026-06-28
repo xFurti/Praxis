@@ -46,25 +46,44 @@ export function Desktop() {
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      const data = event.data as { type?: string; windowId?: string; error?: string }
-      if (data?.type !== 'praxis-runtime-error' || !data.windowId || !data.error) {
+      const data = event.data as {
+        type?: string
+        windowId?: string
+        error?: string
+        width?: number
+        height?: number
+      }
+
+      if (data?.type === 'praxis-runtime-error' && data.windowId && data.error) {
+        const win = wm.windows.find((item) => item.id === data.windowId)
+        if (!win || win.status === 'fixing' || win.errors.length >= 3) {
+          return
+        }
+
+        handles.current.get(win.id)?.cancel()
+        const handle = startFixGeneration({
+          win,
+          error: data.error,
+          onUpdate: wm.updateWindow,
+          onStatus: wm.setStatus,
+          onHtml: wm.setHtml,
+        })
+        handles.current.set(win.id, handle)
         return
       }
 
-      const win = wm.windows.find((item) => item.id === data.windowId)
-      if (!win || win.status === 'fixing' || win.errors.length >= 3) {
-        return
-      }
+      if (data?.type === 'praxis-content-size' && data.windowId && data.width && data.height) {
+        const win = wm.windows.find((item) => item.id === data.windowId)
+        if (!win) {
+          return
+        }
 
-      handles.current.get(win.id)?.cancel()
-      const handle = startFixGeneration({
-        win,
-        error: data.error,
-        onUpdate: wm.updateWindow,
-        onStatus: wm.setStatus,
-        onHtml: wm.setHtml,
-      })
-      handles.current.set(win.id, handle)
+        wm.setBounds(data.windowId, {
+          ...win.bounds,
+          width: clamp(data.width + 28, 380, 980),
+          height: clamp(data.height + 42, 260, 760),
+        })
+      }
     }
 
     window.addEventListener('message', onMessage)
@@ -92,6 +111,10 @@ export function Desktop() {
       ))}
     </InteractionProvider>
   )
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
 }
 
 function deriveTitle(prompt: string) {
