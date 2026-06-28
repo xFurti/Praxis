@@ -24,7 +24,7 @@ export class ProviderError extends Error {
  * @returns {Promise<string> | AsyncIterable<string>}
  */
 export async function callModel(opts) {
-  const provider = (process.env.PROVIDER || 'mock').toLowerCase()
+  const provider = resolveProvider()
   const model = resolveModel(provider)
   const apiKey = resolveApiKey(provider)
   const baseUrl = resolveBaseUrl(provider)
@@ -41,7 +41,7 @@ export async function callModel(opts) {
   let res
 
   try {
-    res = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`, {
+    res = await fetch(buildChatCompletionsUrl(baseUrl), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -82,6 +82,23 @@ export async function callModel(opts) {
   return normalizeRoleOutput(opts.role, extractMessageContent(data))
 }
 
+function resolveProvider() {
+  const explicit = (process.env.PROVIDER || '').trim().toLowerCase()
+  if (explicit) {
+    return explicit
+  }
+
+  if (process.env.CEREBRAS_API_KEY) {
+    return 'cerebras'
+  }
+
+  if (process.env.MODEL_API_KEY) {
+    return 'openai-compatible'
+  }
+
+  return 'mock'
+}
+
 function resolveModel(provider) {
   if (provider === 'cerebras') {
     return process.env.CEREBRAS_MODEL || process.env.MODEL || 'llama-3.3-70b'
@@ -104,6 +121,16 @@ function resolveBaseUrl(provider) {
   }
 
   return process.env.MODEL_BASE_URL || ''
+}
+
+function buildChatCompletionsUrl(baseUrl) {
+  const normalized = (baseUrl || '').replace(/\/+$/, '')
+
+  if (/\/v\d+$/i.test(normalized)) {
+    return `${normalized}/chat/completions`
+  }
+
+  return `${normalized}/v1/chat/completions`
 }
 
 /**
