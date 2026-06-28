@@ -78,10 +78,17 @@ export function Desktop() {
           return
         }
 
+        const nextWidth = clamp(data.width + 28, 380, 980)
+        const nextHeight = clamp(data.height + 42, 260, 760)
+
+        if (Math.abs(nextWidth - win.bounds.width) < 12 && Math.abs(nextHeight - win.bounds.height) < 12) {
+          return
+        }
+
         wm.setBounds(data.windowId, {
           ...win.bounds,
-          width: clamp(data.width + 28, 380, 980),
-          height: clamp(data.height + 42, 260, 760),
+          width: nextWidth,
+          height: nextHeight,
         })
       }
     }
