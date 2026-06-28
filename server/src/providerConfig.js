@@ -1,9 +1,11 @@
 export function getProviderConfigs() {
+  const defaultProvider = resolveDefaultProvider()
+
   return [
     {
       id: 'fast',
       label: process.env.SPEED_COMPARE_FAST_LABEL || 'Fast provider',
-      provider: (process.env.SPEED_COMPARE_FAST_PROVIDER || process.env.PROVIDER || 'mock').toLowerCase(),
+      provider: (process.env.SPEED_COMPARE_FAST_PROVIDER || defaultProvider).toLowerCase(),
       model:
         process.env.SPEED_COMPARE_FAST_MODEL ||
         process.env.CEREBRAS_MODEL ||
@@ -24,7 +26,7 @@ export function getProviderConfigs() {
     {
       id: 'slow',
       label: process.env.SPEED_COMPARE_SLOW_LABEL || 'Slow provider',
-      provider: (process.env.SPEED_COMPARE_SLOW_PROVIDER || process.env.PROVIDER || 'mock').toLowerCase(),
+      provider: (process.env.SPEED_COMPARE_SLOW_PROVIDER || defaultProvider).toLowerCase(),
       model:
         process.env.SPEED_COMPARE_SLOW_MODEL ||
         process.env.CEREBRAS_MODEL ||
@@ -43,6 +45,23 @@ export function getProviderConfigs() {
       multimodal: readBoolean(process.env.SPEED_COMPARE_SLOW_MULTIMODAL),
     },
   ]
+}
+
+function resolveDefaultProvider() {
+  const explicit = (process.env.PROVIDER || '').trim().toLowerCase()
+  if (explicit) {
+    return explicit
+  }
+
+  if (process.env.CEREBRAS_API_KEY) {
+    return 'cerebras'
+  }
+
+  if (process.env.MODEL_API_KEY) {
+    return 'openai-compatible'
+  }
+
+  return 'mock'
 }
 
 export function getDefaultInterpreterProvider() {
