@@ -79,7 +79,7 @@ export function Desktop() {
         }
 
         const nextWidth = clamp(data.width + 28, 380, 980)
-        const nextHeight = clamp(data.height + 42, 260, 760)
+        const nextHeight = clamp(data.height + 56, 260, 760)
 
         if (Math.abs(nextWidth - win.bounds.width) < 12 && Math.abs(nextHeight - win.bounds.height) < 12) {
           return
