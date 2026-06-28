@@ -6,7 +6,7 @@
 - [x] 1.4 Aggiungere una regola operativa al flusso di lavoro del progetto: prima di ogni commit verificare che `.gitignore` protegga `.env` e che nessuna chiave API o secret sia staged
 - [x] 1.5 Verificare che la cartella `openspec/` sia versionata insieme agli artifact del change come prova del processo di sviluppo
 - [x] 1.6 Dopo il completamento di ciascun task eseguire un commit atomico con conventional commit, usando prefisso `[prebuild]` per i task di scaffolding e `[core]` per i task hackathon
-- [ ] 1.7 Creare il commit marcatore vuoto `"[core] HACKATHON START"` con `git commit --allow-empty` all'inizio del lavoro CORE
+- [x] 1.7 Creare il commit marcatore vuoto `"[core] HACKATHON START"` con `git commit --allow-empty` all'inizio del lavoro CORE
 - [ ] 1.8 Creare il commit marcatore vuoto `"[core] HACKATHON END"` con `git commit --allow-empty` alla chiusura del lavoro CORE
 
 ## 2. PRE-BUILD Shell Foundations
