@@ -40,7 +40,8 @@ export async function handleBuild(req, res, next) {
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
         res.end()
       } catch (err) {
-        res.write(`event: error\ndata: ${JSON.stringify({ error: 'Build failed' })}\n\n`)
+        const message = err?.publicMessage || err?.message || 'Build failed'
+        res.write(`data: ${JSON.stringify({ error: message })}\n\n`)
         res.end()
       }
     } else {

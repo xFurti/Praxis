@@ -51,10 +51,17 @@ export async function callModel(opts) {
         model,
         messages: opts.messages,
         stream: !!opts.stream,
-        max_tokens: 4096,
+        max_tokens: 32768,
       }),
+      signal: AbortSignal.timeout(60000),
     })
   } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new ProviderError('The model provider timed out.', {
+        logMessage: `callModel ${provider} timeout after 60s`,
+        statusCode: 504,
+      })
+    }
     throw new ProviderError('Unable to reach the model provider.', {
       logMessage: `callModel ${provider} network error: ${error instanceof Error ? error.message : String(error)}`,
     })
@@ -179,6 +186,8 @@ async function* streamChunks(body) {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buf = ''
+  let accumulated = ''
+  let fencesStripped = false
 
   try {
     while (true) {
@@ -193,7 +202,18 @@ async function* streamChunks(body) {
         try {
           const parsed = JSON.parse(trimmed)
           const delta = extractContentText(parsed.choices?.[0]?.delta?.content)
-          if (delta) yield delta
+          if (delta) {
+            accumulated += delta
+            // Strip leading markdown fence on first meaningful chunk
+            if (!fencesStripped) {
+              const stripped = accumulated.replace(/^```(?:html)?\s*/i, '')
+              if (stripped !== accumulated || !accumulated.startsWith('`')) {
+                fencesStripped = true
+                accumulated = stripped
+              }
+            }
+            yield delta
+          }
         } catch {
           // non-JSON line, skip
         }

@@ -97,15 +97,9 @@ async function runFix(options: FixOptions, signal: AbortSignal) {
 
   try {
     onStatus(win.id, 'fixing')
+    const errorEntry = { at: new Date().toISOString(), error, applied: false }
     onUpdate(win.id, {
-      errors: [
-        ...win.errors,
-        {
-          at: new Date().toISOString(),
-          error,
-          applied: false,
-        },
-      ],
+      errors: [...win.errors, errorEntry],
     })
 
     let fixed = await requestFix(win.html, error, signal)
@@ -114,14 +108,7 @@ async function runFix(options: FixOptions, signal: AbortSignal) {
 
     onHtml(win.id, fixed)
     onUpdate(win.id, {
-      errors: [
-        ...win.errors,
-        {
-          at: new Date().toISOString(),
-          error,
-          applied: true,
-        },
-      ],
+      errors: [...win.errors, { ...errorEntry, applied: true }],
     })
     onStatus(win.id, 'ready')
   } catch (fixError) {
