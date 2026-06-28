@@ -9,6 +9,7 @@ type LiveGenerationOptions = {
   onUpdate: (id: string, patch: Partial<AppWindow>) => void
   onStatus: (id: string, status: GenerationStatus) => void
   onHtml: (id: string, html: string) => void
+  onTokensPerSec?: (fast: number, slow: number | null) => void
 }
 
 export type LiveGenHandle = {
@@ -36,7 +37,7 @@ export function startLiveGeneration(options: LiveGenerationOptions): LiveGenHand
 }
 
 async function run(options: LiveGenerationOptions, signal: AbortSignal) {
-  const { win, prompt, screenshot, onUpdate, onStatus, onHtml } = options
+  const { win, prompt, screenshot, onUpdate, onStatus, onHtml, onTokensPerSec } = options
 
   try {
     onStatus(win.id, 'interpreting')
@@ -52,11 +53,20 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
 
     onStatus(win.id, 'building')
     let html = ''
+    let totalTokens = 0
+    const buildStart = Date.now()
 
     for await (const chunk of buildStream(spec, signal)) {
       html += chunk
+      totalTokens += estimateTokens(chunk)
+      const elapsed = Math.max(1, Date.now() - buildStart)
+      const currentTokPerSec = Math.round((totalTokens / elapsed) * 1000)
+      onTokensPerSec?.(currentTokPerSec, null)
       onHtml(win.id, html)
     }
+
+    const buildDuration = Math.max(1, Date.now() - buildStart)
+    const finalTokPerSec = Math.round((totalTokens / buildDuration) * 1000)
 
     // Strip markdown fences the model may have wrapped around the HTML
     html = stripHtmlFences(html)
@@ -64,6 +74,7 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
     html = withRuntimeMonitor(html, win.id)
     onHtml(win.id, html)
     onStatus(win.id, 'ready')
+    onTokensPerSec?.(finalTokPerSec, null)
   } catch (error) {
     if (signal.aborted) {
       return
@@ -324,7 +335,8 @@ function validateGeneratedHtml(html: string) {
 }
 
 function withRuntimeMonitor(html: string, windowId: string) {
-  const monitor = `<script>(function(){if(window.__praxisRuntimeMonitorInstalled)return;window.__praxisRuntimeMonitorInstalled=true;function post(payload){try{parent.postMessage(Object.assign({windowId:${JSON.stringify(windowId)}},payload),'*')}catch(_e){}}function send(error){post({type:'praxis-runtime-error',error:String(error||'Unknown runtime error')})}function preferredContentBox(){var body=document.body;var doc=document.documentElement;var card=document.querySelector('.praxis-card');var bodyStyle=body?window.getComputedStyle(body):null;var px=function(v){var n=parseFloat(v||'0');return Number.isFinite(n)?n:0};var padX=bodyStyle?px(bodyStyle.paddingLeft)+px(bodyStyle.paddingRight):0;var padY=bodyStyle?px(bodyStyle.paddingTop)+px(bodyStyle.paddingBottom):0;if(card&&card.getBoundingClientRect){var rect=card.getBoundingClientRect();return {width:Math.ceil(rect.width+padX),height:Math.ceil(rect.height+padY)}}return {width:Math.max(window.innerWidth,doc?doc.clientWidth:0,body?body.clientWidth:0),height:Math.max(window.innerHeight,doc?doc.clientHeight:0,body?body.clientHeight:0)}}function reportSize(){try{var box=preferredContentBox();post({type:'praxis-content-size',width:box.width,height:box.height})}catch(_e){}}window.addEventListener('error',function(event){send(event.message||event.error&&event.error.message||'Runtime error')});window.addEventListener('unhandledrejection',function(event){var reason=event.reason;send(reason&&reason.message?reason.message:String(reason||'Unhandled promise rejection'))});window.addEventListener('load',reportSize);window.addEventListener('resize',reportSize);if(window.ResizeObserver){if(document.body){new ResizeObserver(reportSize).observe(document.body)}var card=document.querySelector('.praxis-card');if(card){new ResizeObserver(reportSize).observe(card)}}setTimeout(reportSize,50);setTimeout(reportSize,250);})();</script>`
+  // Only inject error tracking — no auto-resize
+  const monitor = `<script>(function(){if(window.__praxisRuntimeMonitorInstalled)return;window.__praxisRuntimeMonitorInstalled=true;function send(error){try{parent.postMessage({windowId:${JSON.stringify(windowId)},type:'praxis-runtime-error',error:String(error||'Unknown runtime error')},'*')}catch(_e){}}window.addEventListener('error',function(event){send(event.message||(event.error&&event.error.message)||'Runtime error')});window.addEventListener('unhandledrejection',function(event){var reason=event.reason;send(reason&&reason.message?reason.message:String(reason||'Unhandled promise rejection'))});})();</script>`
 
   if (html.includes('praxis-runtime-error')) {
     return html
@@ -353,6 +365,10 @@ function escapeHtml(text: string) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;')
+}
+
+function estimateTokens(text: string) {
+  return Math.max(1, Math.ceil(String(text || '').length / 4))
 }
 
 function boundsForWindowSize(size: AppSpec['window_size']) {

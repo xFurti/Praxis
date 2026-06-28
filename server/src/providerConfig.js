@@ -4,13 +4,13 @@ export function getProviderConfigs() {
   return [
     {
       id: 'fast',
-      label: process.env.SPEED_COMPARE_FAST_LABEL || 'Fast provider',
+      label: process.env.SPEED_COMPARE_FAST_LABEL || 'Gemma 4 31B',
       provider: (process.env.SPEED_COMPARE_FAST_PROVIDER || defaultProvider).toLowerCase(),
       model:
         process.env.SPEED_COMPARE_FAST_MODEL ||
         process.env.CEREBRAS_MODEL ||
         process.env.MODEL ||
-        'mock-model',
+        'gemma-4-31b',
       apiKey:
         process.env.SPEED_COMPARE_FAST_API_KEY ||
         process.env.CEREBRAS_API_KEY ||
@@ -28,13 +28,14 @@ export function getProviderConfigs() {
     },
     {
       id: 'slow',
-      label: process.env.SPEED_COMPARE_SLOW_LABEL || 'Slow provider',
+      label: process.env.SPEED_COMPARE_SLOW_LABEL || 'Qwen 3.5 35B',
       provider: (process.env.SPEED_COMPARE_SLOW_PROVIDER || defaultProvider).toLowerCase(),
       model:
         process.env.SPEED_COMPARE_SLOW_MODEL ||
+        process.env.QWEN_MODEL ||
         process.env.CEREBRAS_MODEL ||
         process.env.MODEL ||
-        'mock-model',
+        'qwen-3-35b',
       apiKey:
         process.env.SPEED_COMPARE_SLOW_API_KEY ||
         process.env.CEREBRAS_API_KEY ||
@@ -42,6 +43,7 @@ export function getProviderConfigs() {
         '',
       baseUrl:
         process.env.SPEED_COMPARE_SLOW_BASE_URL ||
+        process.env.QWEN_BASE_URL ||
         process.env.CEREBRAS_BASE_URL ||
         process.env.MODEL_BASE_URL ||
         '',

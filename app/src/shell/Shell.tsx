@@ -14,6 +14,43 @@ type ShellProps = {
 export function Shell({ onPrompt }: ShellProps) {
   const [providers, setProviders] = useState<ProviderEntry[] | undefined>()
   const [multimodal, setMultimodal] = useState(false)
+  const [liveTokens, setLiveTokens] = useState<{ fast: number; slow: number | null }>({ fast: 0, slow: null })
+  const [isBuilding, setIsBuilding] = useState(false)
+
+  // Listen for live tokens/sec updates from the generation pipeline
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { fast: number; slow: number | null }
+      setLiveTokens(detail)
+      setIsBuilding(true)
+    }
+    window.addEventListener('praxis-tokens', handler)
+    return () => window.removeEventListener('praxis-tokens', handler)
+  }, [])
+
+  // Reset building state when all windows are ready/idle
+  useEffect(() => {
+    const check = () => {
+      const windows = (window as any).__praxisWindows as any[] | undefined
+      if (windows && windows.some((w: any) => w.status === 'building' || w.status === 'interpreting' || w.status === 'fixing')) {
+        return
+      }
+      setIsBuilding(false)
+    }
+    const id = setInterval(check, 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Merge live tokens into provider list during build
+  const effectiveProviders = providers?.map((p) => {
+    if (p.id === 'fast' && isBuilding && liveTokens.fast > 0) {
+      return { ...p, tokenPerSec: liveTokens.fast, status: 'measuring' as const }
+    }
+    if (p.id === 'slow' && isBuilding && liveTokens.slow != null && liveTokens.slow > 0) {
+      return { ...p, tokenPerSec: liveTokens.slow, status: 'measuring' as const }
+    }
+    return p
+  })
 
   const handlePrompt = (prompt: string, screenshot?: string) => {
     onPrompt?.(prompt)
@@ -66,7 +103,7 @@ export function Shell({ onPrompt }: ShellProps) {
         {/* Speed Compare panel — floating top-right */}
         <div className="pointer-events-none absolute right-4 top-4 z-20 flex flex-col gap-3">
           <div className="pointer-events-auto w-72">
-            <SpeedCompare providers={providers} />
+            <SpeedCompare providers={effectiveProviders} />
           </div>
         </div>
 

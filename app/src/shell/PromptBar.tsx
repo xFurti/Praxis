@@ -42,7 +42,7 @@ export function PromptBar({
             <div className="flex flex-1 flex-col gap-0.5">
               <span className="text-xs font-medium text-praxis-cyan">Screenshot attached</span>
               <span className="text-[11px] text-praxis-muted">
-                {multimodal ? 'Will be analyzed by the interpreter' : 'Text-only fallback — multimodal not enabled'}
+                Will be analyzed by the vision agent
               </span>
             </div>
             <button

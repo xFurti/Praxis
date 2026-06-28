@@ -32,6 +32,11 @@ export function Desktop() {
         onUpdate: wm.updateWindow,
         onStatus: wm.setStatus,
         onHtml: wm.setHtml,
+        onTokensPerSec: (fast, slow) => {
+          window.dispatchEvent(new CustomEvent('praxis-tokens', {
+            detail: { fast, slow },
+          }))
+        },
       })
       handles.current.set(win.id, handle)
     },
@@ -51,8 +56,6 @@ export function Desktop() {
         type?: string
         windowId?: string
         error?: string
-        width?: number
-        height?: number
       }
 
       if (data?.type === 'praxis-runtime-error' && data.windowId && data.error) {
@@ -70,27 +73,6 @@ export function Desktop() {
           onHtml: wm.setHtml,
         })
         handles.current.set(win.id, handle)
-        return
-      }
-
-      if (data?.type === 'praxis-content-size' && data.windowId && data.width && data.height) {
-        const win = wm.windows.find((item) => item.id === data.windowId)
-        if (!win) {
-          return
-        }
-
-        const nextWidth = clamp(data.width + 28, 380, 980)
-        const nextHeight = clamp(data.height + 56, 260, 760)
-
-        if (Math.abs(nextWidth - win.bounds.width) < 12 && Math.abs(nextHeight - win.bounds.height) < 12) {
-          return
-        }
-
-        wm.setBounds(data.windowId, {
-          ...win.bounds,
-          width: nextWidth,
-          height: nextHeight,
-        })
       }
     }
 
@@ -130,10 +112,6 @@ export function Desktop() {
       </div>
     </InteractionProvider>
   )
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
 }
 
 function deriveTitle(prompt: string) {
