@@ -7,7 +7,7 @@ import { startFixGeneration, startLiveGeneration, type LiveGenHandle } from '../
 
 declare global {
   interface Window {
-    __praxisGenerate?: (p: string) => void
+    __praxisGenerate?: (prompt: string, screenshot?: string) => void
   }
 }
 
@@ -16,12 +16,13 @@ export function Desktop() {
   const handles = useRef<Map<string, LiveGenHandle>>(new Map())
 
   const generate = useCallback(
-    (prompt: string) => {
+    (prompt: string, screenshot?: string) => {
       const title = deriveTitle(prompt)
       const win = wm.openWindow({ title, status: 'interpreting', html: '' })
       const handle = startLiveGeneration({
         win,
         prompt,
+        screenshot,
         onUpdate: wm.updateWindow,
         onStatus: wm.setStatus,
         onHtml: wm.setHtml,

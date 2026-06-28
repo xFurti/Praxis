@@ -5,6 +5,8 @@ import { callModel } from './callModel.js'
 import { handleInterpret } from './routes/interpret.js'
 import { handleBuild } from './routes/build.js'
 import { handleFix } from './routes/fix.js'
+import { handleSpeedCompare } from './routes/speedCompare.js'
+import { handleProviderCapabilities } from './routes/providerCapabilities.js'
 
 const app = express()
 const PORT = Number(process.env.PORT) || 3001
@@ -19,6 +21,8 @@ app.get('/health', (_req, res) => res.json({ ok: true }))
 app.post('/api/interpret', handleInterpret)
 app.post('/api/build', handleBuild)
 app.post('/api/fix', handleFix)
+app.get('/api/speed-compare', handleSpeedCompare)
+app.get('/api/provider-capabilities', handleProviderCapabilities)
 
 app.use((err, _req, res, _next) => {
   const status = typeof err?.statusCode === 'number' ? err.statusCode : 500

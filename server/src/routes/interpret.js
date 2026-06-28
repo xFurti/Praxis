@@ -1,5 +1,6 @@
 import { callModel, ProviderError } from '../callModel.js'
 import { INTERPRETER_SYSTEM_PROMPT } from '../praxisPrompts.js'
+import { getDefaultInterpreterProvider } from '../providerConfig.js'
 
 /** POST /api/interpret
  *  Body: { prompt: string, screenshot?: string }
@@ -12,16 +13,36 @@ export async function handleInterpret(req, res, next) {
       return res.status(400).json({ error: 'prompt is required' })
     }
 
+    const provider = getDefaultInterpreterProvider()
+    const supportsMultimodal = provider.multimodal && Boolean(screenshot)
+
     const messages = [
       {
         role: 'system',
         content: INTERPRETER_SYSTEM_PROMPT,
       },
-      { role: 'user', content: screenshot ? `[image attached] ${prompt}` : prompt },
+      {
+        role: 'user',
+        content: supportsMultimodal
+          ? [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: screenshot } },
+            ]
+          : screenshot
+            ? `${prompt}\n\n[image attached but multimodal support unavailable, continue with text-only interpretation]`
+            : prompt,
+      },
     ]
 
-    const result = await callModel({ role: 'interpreter', messages })
-    res.json({ spec: parseSpec(result) })
+    const result = await callModel({
+      role: 'interpreter',
+      provider: provider.provider,
+      model: provider.model,
+      apiKey: provider.apiKey,
+      baseUrl: provider.baseUrl,
+      messages,
+    })
+    res.json({ spec: parseSpec(result), usedTextFallback: Boolean(screenshot) && !supportsMultimodal })
   } catch (err) {
     next(err)
   }

@@ -5,6 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001
 type LiveGenerationOptions = {
   win: AppWindow
   prompt: string
+  screenshot?: string
   onUpdate: (id: string, patch: Partial<AppWindow>) => void
   onStatus: (id: string, status: GenerationStatus) => void
   onHtml: (id: string, html: string) => void
@@ -35,11 +36,11 @@ export function startLiveGeneration(options: LiveGenerationOptions): LiveGenHand
 }
 
 async function run(options: LiveGenerationOptions, signal: AbortSignal) {
-  const { win, prompt, onUpdate, onStatus, onHtml } = options
+  const { win, prompt, screenshot, onUpdate, onStatus, onHtml } = options
 
   try {
     onStatus(win.id, 'interpreting')
-    const spec = validateSpec(await interpretPrompt(prompt, signal))
+    const spec = validateSpec(await interpretPrompt(prompt, screenshot, signal))
     onUpdate(win.id, {
       spec,
       title: spec.app_name || win.title,
@@ -133,11 +134,11 @@ async function runFix(options: FixOptions, signal: AbortSignal) {
   }
 }
 
-async function interpretPrompt(prompt: string, signal: AbortSignal): Promise<AppSpec> {
+async function interpretPrompt(prompt: string, screenshot: string | undefined, signal: AbortSignal): Promise<AppSpec> {
   const res = await fetch(`${API_BASE_URL}/api/interpret`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, screenshot }),
     signal,
   })
 

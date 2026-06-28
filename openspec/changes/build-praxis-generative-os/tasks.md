@@ -48,10 +48,10 @@
 
 ## 7. CORE Speed Compare And Multimodality
 
-- [ ] 7.1 Misurare token/s o metrica equivalente per il provider veloce e quello lento durante chiamate reali e collegare i dati al pannello `Speed Compare`
-- [ ] 7.2 Aggiornare il pannello `Speed Compare` per distinguere chiaramente dati live da placeholder e mostrare eventuali stati di caricamento o errore
-- [ ] 7.3 Se il provider scelto lo consente, implementare drag-and-drop di screenshot e il passaggio multimodale al ruolo INTERPRETER
-- [ ] 7.4 Definire un fallback text-only che mantenga operativo il flusso MVP quando la multimodalita' non e' disponibile o fallisce
+- [x] 7.1 Misurare token/s o metrica equivalente per il provider veloce e quello lento durante chiamate reali e collegare i dati al pannello `Speed Compare`
+- [x] 7.2 Aggiornare il pannello `Speed Compare` per distinguere chiaramente dati live da placeholder e mostrare eventuali stati di caricamento o errore
+- [x] 7.3 Se il provider scelto lo consente, implementare drag-and-drop di screenshot e il passaggio multimodale al ruolo INTERPRETER
+- [x] 7.4 Definire un fallback text-only che mantenga operativo il flusso MVP quando la multimodalita' non e' disponibile o fallisce
 
 ## 8. Validation And Demo Readiness
 

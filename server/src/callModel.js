@@ -1,5 +1,5 @@
 /**
- * @typedef {{ role: 'interpreter' | 'builder' | 'fixer', messages: Array<{role: string, content: string}>, stream?: boolean }} CallModelOpts
+ * @typedef {{ role: 'interpreter' | 'builder' | 'fixer', messages: Array<{role: string, content: unknown}>, stream?: boolean, provider?: string, model?: string, apiKey?: string, baseUrl?: string }} CallModelOpts
  */
 
 const CEREBRAS_BASE_URL = 'https://api.cerebras.ai'
@@ -24,10 +24,10 @@ export class ProviderError extends Error {
  * @returns {Promise<string> | AsyncIterable<string>}
  */
 export async function callModel(opts) {
-  const provider = resolveProvider()
-  const model = resolveModel(provider)
-  const apiKey = resolveApiKey(provider)
-  const baseUrl = resolveBaseUrl(provider)
+  const provider = resolveProvider(opts)
+  const model = resolveModel(provider, opts)
+  const apiKey = resolveApiKey(provider, opts)
+  const baseUrl = resolveBaseUrl(provider, opts)
 
   // No real credentials → mock
   if (provider === 'mock' || !apiKey) {
@@ -82,8 +82,8 @@ export async function callModel(opts) {
   return normalizeRoleOutput(opts.role, extractMessageContent(data))
 }
 
-function resolveProvider() {
-  const explicit = (process.env.PROVIDER || '').trim().toLowerCase()
+function resolveProvider(opts = {}) {
+  const explicit = (opts.provider || process.env.PROVIDER || '').trim().toLowerCase()
   if (explicit) {
     return explicit
   }
@@ -99,7 +99,11 @@ function resolveProvider() {
   return 'mock'
 }
 
-function resolveModel(provider) {
+function resolveModel(provider, opts = {}) {
+  if (opts.model) {
+    return opts.model
+  }
+
   if (provider === 'cerebras') {
     return process.env.CEREBRAS_MODEL || process.env.MODEL || 'llama-3.3-70b'
   }
@@ -107,7 +111,11 @@ function resolveModel(provider) {
   return process.env.MODEL || 'mock-model'
 }
 
-function resolveApiKey(provider) {
+function resolveApiKey(provider, opts = {}) {
+  if (opts.apiKey) {
+    return opts.apiKey
+  }
+
   if (provider === 'cerebras') {
     return process.env.CEREBRAS_API_KEY || process.env.MODEL_API_KEY || ''
   }
@@ -115,7 +123,11 @@ function resolveApiKey(provider) {
   return process.env.MODEL_API_KEY || ''
 }
 
-function resolveBaseUrl(provider) {
+function resolveBaseUrl(provider, opts = {}) {
+  if (opts.baseUrl) {
+    return opts.baseUrl
+  }
+
   if (provider === 'cerebras') {
     return process.env.CEREBRAS_BASE_URL || process.env.MODEL_BASE_URL || CEREBRAS_BASE_URL
   }

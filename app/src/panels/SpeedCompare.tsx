@@ -3,6 +3,8 @@ type ProviderEntry = {
   label: string
   tokenPerSec: number | null
   status: 'idle' | 'measuring' | 'done' | 'error'
+  source?: 'live' | 'placeholder'
+  multimodal?: boolean
 }
 
 type SpeedCompareProps = {
@@ -16,6 +18,7 @@ const DEFAULTS: ProviderEntry[] = [
 
 export function SpeedCompare({ providers }: SpeedCompareProps) {
   const list = providers ?? DEFAULTS
+  const usesLiveData = providers?.some((provider) => provider.source === 'live')
 
   return (
     <div className="praxis-card w-full p-4">
@@ -34,7 +37,9 @@ export function SpeedCompare({ providers }: SpeedCompareProps) {
             </div>
             <span className="w-16 text-right font-mono text-xs text-praxis-text">
               {p.status === 'measuring'
-                ? '…'
+                ? '...'
+                : p.status === 'error'
+                  ? 'error'
                 : p.tokenPerSec != null
                   ? `${p.tokenPerSec} tok/s`
                   : '—'}
@@ -42,9 +47,10 @@ export function SpeedCompare({ providers }: SpeedCompareProps) {
           </div>
         ))}
       </div>
-      <p className="mt-2 text-xs text-praxis-muted/70">
-        {providers ? 'Live data' : 'Placeholder values — connect providers in CORE'}
-      </p>
+      <div className="mt-2 flex items-center justify-between gap-2 text-xs text-praxis-muted/70">
+        <p>{usesLiveData ? 'Live data' : 'Placeholder values — connect providers in CORE'}</p>
+        <p>{list.some((provider) => provider.multimodal) ? 'Multimodal ready' : 'Text-only fallback'}</p>
+      </div>
     </div>
   )
 }
