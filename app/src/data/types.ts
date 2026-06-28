@@ -33,10 +33,11 @@ export type UserPromptRequest = {
 }
 
 export type AppSpec = {
-  name: string
-  purpose: string
-  components: Array<{ name: string; kind: string; description: string }>
-  notes?: string
+  app_name: string
+  description: string
+  components: string[]
+  logic: string
+  window_size: 'small' | 'medium' | 'large'
 }
 
 export type GenerationResult = {

@@ -36,8 +36,8 @@
 
 - [x] 5.1 Scrivere i system prompt reali per i ruoli INTERPRETER, BUILDER e FIXER, includendo il vincolo di usare obbligatoriamente il design system Praxis nel codice generato
 - [x] 5.2 Collegare `callModel({ role, messages, stream })` a un endpoint OpenAI-compatible reale con provider/model configurabili da environment per Cerebras o GLM
-- [ ] 5.3 Implementare la normalizzazione backend delle risposte provider e la gestione sicura degli errori senza esporre chiavi o dettagli sensibili al client
-- [ ] 5.4 Implementare streaming reale del BUILDER fino alla UI, rendendo visibile a schermo l'effetto "l'app si scrive da sola"
+- [x] 5.3 Implementare la normalizzazione backend delle risposte provider e la gestione sicura degli errori senza esporre chiavi o dettagli sensibili al client
+- [x] 5.4 Implementare streaming reale del BUILDER fino alla UI, rendendo visibile a schermo l'effetto "l'app si scrive da sola"
 
 ## 6. CORE Multi-Agent Generation Flow
 

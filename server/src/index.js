@@ -20,6 +20,14 @@ app.post('/api/interpret', handleInterpret)
 app.post('/api/build', handleBuild)
 app.post('/api/fix', handleFix)
 
+app.use((err, _req, res, _next) => {
+  const status = typeof err?.statusCode === 'number' ? err.statusCode : 500
+  const message = err?.publicMessage || 'Internal server error.'
+
+  console.error(err)
+  res.status(status).json({ error: message })
+})
+
 // Expose callModel for potential future routes
 export { callModel }
 

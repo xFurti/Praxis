@@ -4,6 +4,15 @@
 
 const CEREBRAS_BASE_URL = 'https://api.cerebras.ai'
 
+export class ProviderError extends Error {
+  constructor(publicMessage, options = {}) {
+    super(options.logMessage || publicMessage)
+    this.name = 'ProviderError'
+    this.publicMessage = publicMessage
+    this.statusCode = options.statusCode || 502
+  }
+}
+
 /**
  * callModel({ role, messages, stream })
  *
@@ -22,35 +31,55 @@ export async function callModel(opts) {
 
   // No real credentials → mock
   if (provider === 'mock' || !apiKey) {
-    return mockResponse(opts.role)
+    if (opts.stream) {
+      return mockStreamResponse(opts.role)
+    }
+
+    return normalizeRoleOutput(opts.role, mockResponse(opts.role))
   }
 
-  // Real OpenAI-compatible call
-  const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: opts.messages,
-      stream: !!opts.stream,
-      max_tokens: 4096,
-    }),
-  })
+  let res
+
+  try {
+    res = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: opts.messages,
+        stream: !!opts.stream,
+        max_tokens: 4096,
+      }),
+    })
+  } catch (error) {
+    throw new ProviderError('Unable to reach the model provider.', {
+      logMessage: `callModel ${provider} network error: ${error instanceof Error ? error.message : String(error)}`,
+    })
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`callModel ${provider} error ${res.status}: ${body.slice(0, 200)}`)
+    throw new ProviderError('The model provider returned an error.', {
+      logMessage: `callModel ${provider} error ${res.status}: ${body.slice(0, 400)}`,
+      statusCode: 502,
+    })
   }
 
   if (opts.stream) {
+    if (!res.body) {
+      throw new ProviderError('The model provider did not return a stream body.', {
+        logMessage: `callModel ${provider} stream missing response body`,
+      })
+    }
+
     return streamChunks(res.body)
   }
 
   const data = await res.json()
-  return data.choices?.[0]?.message?.content ?? ''
+  return normalizeRoleOutput(opts.role, extractMessageContent(data))
 }
 
 function resolveModel(provider) {
@@ -93,6 +122,15 @@ function mockResponse(role) {
   return mocks[role] ?? ''
 }
 
+async function* mockStreamResponse(role) {
+  const text = normalizeRoleOutput(role, mockResponse(role))
+  const step = Math.max(32, Math.floor(text.length / 8))
+
+  for (let i = 0; i < text.length; i += step) {
+    yield text.slice(i, i + step)
+  }
+}
+
 /**
  * Naive SSE chunk reader for streaming. Normalizes provider differences.
  */
@@ -113,7 +151,7 @@ async function* streamChunks(body) {
         if (!trimmed || trimmed === '[DONE]') continue
         try {
           const parsed = JSON.parse(trimmed)
-          const delta = parsed.choices?.[0]?.delta?.content
+          const delta = extractContentText(parsed.choices?.[0]?.delta?.content)
           if (delta) yield delta
         } catch {
           // non-JSON line, skip
@@ -123,4 +161,65 @@ async function* streamChunks(body) {
   } finally {
     reader.releaseLock()
   }
+}
+
+function extractMessageContent(data) {
+  return extractContentText(data?.choices?.[0]?.message?.content)
+}
+
+function extractContentText(content) {
+  if (typeof content === 'string') {
+    return content
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part
+        if (part && typeof part.text === 'string') return part.text
+        return ''
+      })
+      .join('')
+  }
+
+  return ''
+}
+
+export function normalizeRoleOutput(role, raw) {
+  const text = String(raw || '').trim()
+
+  if (role === 'builder' || role === 'fixer') {
+    return normalizeHtml(text)
+  }
+
+  if (role === 'interpreter') {
+    return normalizeJson(text)
+  }
+
+  return text
+}
+
+function normalizeHtml(text) {
+  const lower = text.toLowerCase()
+  const doctypeIndex = lower.indexOf('<!doctype html>')
+  const htmlIndex = lower.indexOf('<html')
+  const startIndex = doctypeIndex >= 0 ? doctypeIndex : htmlIndex
+  const endIndex = lower.lastIndexOf('</html>')
+
+  if (startIndex >= 0 && endIndex >= 0 && endIndex > startIndex) {
+    return text.slice(startIndex, endIndex + '</html>'.length).trim()
+  }
+
+  return text
+}
+
+function normalizeJson(text) {
+  const startIndex = text.indexOf('{')
+  const endIndex = text.lastIndexOf('}')
+
+  if (startIndex >= 0 && endIndex > startIndex) {
+    return text.slice(startIndex, endIndex + 1).trim()
+  }
+
+  return text
 }

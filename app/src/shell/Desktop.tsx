@@ -3,7 +3,7 @@ import { useWindowManager } from '../windows/useWindowManager'
 import { AppWindowFrame } from '../windows/AppWindowFrame'
 import { InteractionProvider } from '../windows/interactionContext'
 import { AppFrame } from '../runtime/AppFrame'
-import { startMockGeneration, type MockGenHandle } from '../runtime/mockGeneration'
+import { startLiveGeneration, type LiveGenHandle } from '../runtime/liveGeneration'
 
 declare global {
   interface Window {
@@ -13,16 +13,20 @@ declare global {
 
 export function Desktop() {
   const wm = useWindowManager()
-  const handles = useRef<Map<string, MockGenHandle>>(new Map())
+  const handles = useRef<Map<string, LiveGenHandle>>(new Map())
 
   const generate = useCallback(
     (prompt: string) => {
       const title = deriveTitle(prompt)
-      const id = wm.openWindow({ title, status: 'interpreting', html: '' })
-      const win = wm.windows.find((w) => w.id === id)
-      if (!win) return
-      const handle = startMockGeneration(win, wm.updateWindow, wm.setStatus, wm.setHtml)
-      handles.current.set(id, handle)
+      const win = wm.openWindow({ title, status: 'interpreting', html: '' })
+      const handle = startLiveGeneration({
+        win,
+        prompt,
+        onUpdate: wm.updateWindow,
+        onStatus: wm.setStatus,
+        onHtml: wm.setHtml,
+      })
+      handles.current.set(win.id, handle)
     },
     [wm],
   )

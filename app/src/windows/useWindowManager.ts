@@ -25,7 +25,7 @@ export function useWindowManager() {
       errors: partial.errors ?? [],
     }
     setWindows((prev) => [...prev, win])
-    return id
+    return win
   }, [windows.length])
 
   const updateWindow = useCallback((id: string, patch: Partial<AppWindow>) => {
