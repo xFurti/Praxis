@@ -9,12 +9,11 @@ import { getDefaultInterpreterProvider } from '../providerConfig.js'
 export async function handleInterpret(req, res, next) {
   try {
     const { prompt, screenshot } = req.body
-    if (!prompt) {
-      return res.status(400).json({ error: 'prompt is required' })
+    if (!prompt && !screenshot) {
+      return res.status(400).json({ error: 'prompt or screenshot is required' })
     }
 
     const provider = getDefaultInterpreterProvider()
-    const supportsMultimodal = provider.multimodal && Boolean(screenshot)
 
     const messages = [
       {
@@ -23,14 +22,7 @@ export async function handleInterpret(req, res, next) {
       },
       {
         role: 'user',
-        content: supportsMultimodal
-          ? [
-              { type: 'image_url', image_url: { url: screenshot } },
-              { type: 'text', text: prompt },
-            ]
-          : screenshot
-            ? `${prompt}\n\n[image attached but multimodal support unavailable, continue with text-only interpretation]`
-            : prompt,
+        content: prompt,
       },
     ]
 
@@ -42,7 +34,7 @@ export async function handleInterpret(req, res, next) {
       baseUrl: provider.baseUrl,
       messages,
     })
-    res.json({ spec: parseSpec(result), usedTextFallback: Boolean(screenshot) && !supportsMultimodal })
+    res.json({ spec: parseSpec(result) })
   } catch (err) {
     next(err)
   }

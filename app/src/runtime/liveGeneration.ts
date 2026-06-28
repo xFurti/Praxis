@@ -123,11 +123,38 @@ async function runFix(options: FixOptions, signal: AbortSignal) {
   }
 }
 
+async function describeImage(screenshot: string, signal: AbortSignal): Promise<string> {
+  const res = await fetch(`${API_BASE_URL}/api/vision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ screenshot }),
+    signal,
+  })
+
+  if (!res.ok) {
+    // Vision failed — fall back gracefully, don't block generation
+    return ''
+  }
+
+  const data = (await res.json()) as { description?: string }
+  return data.description || ''
+}
+
 async function interpretPrompt(prompt: string, screenshot: string | undefined, signal: AbortSignal): Promise<AppSpec> {
+  // If a screenshot is present, run the vision agent first to get a detailed text description
+  // Then pass that description as the prompt to the interpreter (text-only, more reliable)
+  let effectivePrompt = prompt
+  if (screenshot) {
+    const visionDescription = await describeImage(screenshot, signal)
+    if (visionDescription) {
+      effectivePrompt = visionDescription + (prompt ? `\n\nUser note: ${prompt}` : '')
+    }
+  }
+
   const res = await fetch(`${API_BASE_URL}/api/interpret`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, screenshot }),
+    body: JSON.stringify({ prompt: effectivePrompt }),
     signal,
   })
 
