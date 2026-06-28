@@ -4,6 +4,7 @@ import { AppWindowFrame } from '../windows/AppWindowFrame'
 import { InteractionProvider } from '../windows/interactionContext'
 import { AppFrame } from '../runtime/AppFrame'
 import { startFixGeneration, startLiveGeneration, type LiveGenHandle } from '../runtime/liveGeneration'
+import { AgentOverlay } from '../agents/AgentOverlay'
 
 declare global {
   interface Window {
@@ -14,6 +15,10 @@ declare global {
 export function Desktop() {
   const wm = useWindowManager()
   const handles = useRef<Map<string, LiveGenHandle>>(new Map())
+  const activeWorkflowWindow =
+    [...wm.windows]
+      .filter((win) => win.status === 'interpreting' || win.status === 'building' || win.status === 'fixing')
+      .sort((a, b) => b.zIndex - a.zIndex)[0] ?? undefined
 
   const generate = useCallback(
     (prompt: string, screenshot?: string) => {
@@ -68,6 +73,7 @@ export function Desktop() {
 
   return (
     <InteractionProvider>
+      <AgentOverlay activeWindow={activeWorkflowWindow} />
       {wm.windows.map((w) => (
         <AppWindowFrame
           key={w.id}

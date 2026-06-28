@@ -11,8 +11,6 @@ type AppWindowFrameProps = {
   children?: React.ReactNode
 }
 
-type DragMode = 'drag' | 'resize'
-
 export function AppWindowFrame({
   win,
   onFocus,
@@ -22,7 +20,7 @@ export function AppWindowFrame({
   children,
 }: AppWindowFrameProps) {
   const interaction = useInteraction()
-  const mode = useRef<DragMode | null>(null)
+  const dragging = useRef(false)
   const start = useRef<{ x: number; y: number; bounds: WindowBounds }>({
     x: 0,
     y: 0,
@@ -30,32 +28,24 @@ export function AppWindowFrame({
   })
 
   const move = (e: ReactPointerEvent) => {
-    if (!mode.current) return
+    if (!dragging.current) return
     e.preventDefault()
     const { x, y, bounds } = start.current
     const dx = e.clientX - x
     const dy = e.clientY - y
-    if (mode.current === 'drag') {
-      onBoundsChange(win.id, { ...bounds, x: bounds.x + dx, y: bounds.y + dy })
-    } else {
-      onBoundsChange(win.id, {
-        ...bounds,
-        width: Math.max(280, bounds.width + dx),
-        height: Math.max(200, bounds.height + dy),
-      })
-    }
+    onBoundsChange(win.id, { ...bounds, x: bounds.x + dx, y: bounds.y + dy })
   }
 
   const end = () => {
-    if (!mode.current) return
-    mode.current = null
+    if (!dragging.current) return
+    dragging.current = false
     interaction.end()
   }
 
-  const begin = (e: ReactPointerEvent, m: DragMode) => {
+  const beginDrag = (e: ReactPointerEvent) => {
     e.stopPropagation()
     onFocus(win.id)
-    mode.current = m
+    dragging.current = true
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     start.current = { x: e.clientX, y: e.clientY, bounds: { ...win.bounds } }
     interaction.begin()
@@ -71,7 +61,7 @@ export function AppWindowFrame({
     >
       <div
         className="flex h-9 shrink-0 cursor-grab items-center justify-between border-b border-praxis-edge/70 px-3 active:cursor-grabbing"
-        onPointerDown={(e) => begin(e, 'drag')}
+        onPointerDown={beginDrag}
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}
@@ -103,14 +93,6 @@ export function AppWindowFrame({
       <div className="relative flex-1 overflow-hidden rounded-b-xl bg-praxis-navy2/60">
         {children}
       </div>
-
-      <div
-        className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
-        onPointerDown={(e) => begin(e, 'resize')}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerCancel={end}
-      />
     </div>
   )
 }

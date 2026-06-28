@@ -74,6 +74,22 @@ body {
     background-size: 200% 100%;
     @apply animate-shimmer;
   }
+
+  .praxis-agent {
+    @apply drop-shadow-[0_0_24px_rgba(34,211,238,0.26)];
+  }
+
+  .praxis-agent-bob {
+    @apply animate-bob;
+  }
+
+  .praxis-agent-jump {
+    @apply animate-jump;
+  }
+
+  .praxis-agent-blink {
+    @apply animate-blink;
+  }
 }
 
 /* Thin scrollbars inside the shell */

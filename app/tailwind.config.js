@@ -40,10 +40,26 @@ export default {
           '0%,100%': { opacity: '0.6' },
           '50%': { opacity: '1' },
         },
+        bob: {
+          '0%,100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-6px)' },
+        },
+        blink: {
+          '0%,100%': { opacity: '0.35' },
+          '50%': { opacity: '1' },
+        },
+        jump: {
+          '0%': { transform: 'translateX(-50%) translateY(18px) scale(0.92)', opacity: '0' },
+          '55%': { transform: 'translateX(-50%) translateY(-10px) scale(1.02)', opacity: '1' },
+          '100%': { transform: 'translateX(-50%) translateY(0px) scale(1)', opacity: '1' },
+        },
       },
       animation: {
         shimmer: 'shimmer 2.5s linear infinite',
         'pulse-soft': 'pulse-soft 1.8s ease-in-out infinite',
+        bob: 'bob 2.2s ease-in-out infinite',
+        blink: 'blink 1.2s ease-in-out infinite',
+        jump: 'jump 420ms ease-out forwards',
       },
     },
   },
