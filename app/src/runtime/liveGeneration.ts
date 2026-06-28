@@ -58,6 +58,8 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
       onHtml(win.id, html)
     }
 
+    // Strip markdown fences the model may have wrapped around the HTML
+    html = stripHtmlFences(html)
     html = await ensureValidHtml(html, 'Generated HTML failed validation.', signal)
     html = withRuntimeMonitor(html, win.id)
     onHtml(win.id, html)
@@ -306,6 +308,15 @@ function withRuntimeMonitor(html: string, windowId: string) {
   }
 
   return `${html}${monitor}`
+}
+
+function stripHtmlFences(text: string) {
+  const t = text.trim()
+  // Remove leading ```html or ``` fence
+  const withoutOpen = t.replace(/^```(?:html)?\s*/i, '')
+  // Remove trailing ``` fence
+  const withoutClose = withoutOpen.replace(/\s*```\s*$/i, '')
+  return withoutClose
 }
 
 function escapeHtml(text: string) {

@@ -25,8 +25,8 @@ export async function handleInterpret(req, res, next) {
         role: 'user',
         content: supportsMultimodal
           ? [
-              { type: 'text', text: prompt },
               { type: 'image_url', image_url: { url: screenshot } },
+              { type: 'text', text: prompt },
             ]
           : screenshot
             ? `${prompt}\n\n[image attached but multimodal support unavailable, continue with text-only interpretation]`

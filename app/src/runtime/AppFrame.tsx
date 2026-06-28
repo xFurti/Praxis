@@ -22,9 +22,15 @@ export function AppFrame({ win }: AppFrameProps) {
     return <GenerationPlaceholder />
   }
 
+  // Use a key that changes when generation completes so React fully remounts
+  // the iframe rather than mutating srcDoc on the existing DOM node.
+  // Browsers don't reliably re-render when srcdoc is updated on an already-loaded iframe.
+  const iframeKey = win.status === 'ready' ? `${win.id}-ready` : win.id
+
   return (
     <div className="absolute inset-0">
       <iframe
+        key={iframeKey}
         title={win.title}
         className="h-full w-full border-0 bg-white"
         srcDoc={win.html}

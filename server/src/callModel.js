@@ -112,7 +112,7 @@ function resolveModel(provider, opts = {}) {
   }
 
   if (provider === 'cerebras') {
-    return process.env.CEREBRAS_MODEL || process.env.MODEL || 'llama-3.3-70b'
+    return process.env.CEREBRAS_MODEL || process.env.MODEL || 'gemma-4-31b'
   }
 
   return process.env.MODEL || 'mock-model'
@@ -186,8 +186,6 @@ async function* streamChunks(body) {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buf = ''
-  let accumulated = ''
-  let fencesStripped = false
 
   try {
     while (true) {
@@ -203,15 +201,6 @@ async function* streamChunks(body) {
           const parsed = JSON.parse(trimmed)
           const delta = extractContentText(parsed.choices?.[0]?.delta?.content)
           if (delta) {
-            accumulated += delta
-            // Strip leading markdown fence on first meaningful chunk
-            if (!fencesStripped) {
-              const stripped = accumulated.replace(/^```(?:html)?\s*/i, '')
-              if (stripped !== accumulated || !accumulated.startsWith('`')) {
-                fencesStripped = true
-                accumulated = stripped
-              }
-            }
             yield delta
           }
         } catch {

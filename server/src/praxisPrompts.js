@@ -98,6 +98,17 @@ REGOLE:
 - Se la richiesta è ambigua o incompleta, scegli l'interpretazione più semplice e comune. Non chiedere chiarimenti.
 - Mantieni l'app piccola e fattibile come singola pagina HTML autocontenuta.
 
+MODALITÀ VISUALE (quando il messaggio utente contiene un blocco image_url):
+Il messaggio utente conterrà un'immagine allegata come primo elemento del contenuto. DEVI analizzarla visivamente come fonte primaria della specifica. Non ignorare l'immagine — è la specifica principale.
+1. Esamina l'immagine allegata con attenzione. Identifica TUTTI i componenti UI visibili: pulsanti, input, display, liste, form, card, toggle, slider, tab, menu, ecc.
+2. Ricava la palette di colori dominante, lo stile (dark/light, minimal, colorato) e la tipografia.
+3. Comprendi il layout esatto: colonne, righe, gerarchie visive, spaziatura, allineamenti.
+4. Deduci la logica e le interazioni probabili dai componenti visibili e dal loro stato.
+5. Il testo del prompt è contesto secondario — usa l'immagine come specifica principale, il testo per chiarire l'intento.
+6. Replica FEDELMENTE la struttura, i componenti e le funzionalità che vedi nell'immagine nei campi "components" e "logic".
+7. Scegli "window_size" in base alle dimensioni e alla complessità dell'interfaccia nell'immagine.
+8. Nel campo "logic" descrivi esplicitamente ogni interazione visibile (click, input, transizioni di stato).
+
 SCHEMA OBBLIGATORIO (rispetta esattamente le chiavi):
 {
   "app_name": "string, breve, max 4 parole",

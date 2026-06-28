@@ -17,21 +17,45 @@ export function PromptBar({
 
   const submit = () => {
     const trimmed = value.trim()
-    if (!trimmed) return
-    onSubmit?.(trimmed, screenshot)
+    if (!trimmed && !screenshot) return
+    onSubmit?.(trimmed || 'Replicate or take inspiration from the attached screenshot', screenshot)
     setValue('')
     setScreenshot(undefined)
   }
 
   const onFileChange = async (file?: File) => {
     if (!file) return
-    const dataUrl = await readAsDataUrl(file)
+    const dataUrl = await compressImage(file, 1024, 0.8)
     setScreenshot(dataUrl)
   }
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-6">
       <div className="pointer-events-auto w-full max-w-3xl">
+        {screenshot && (
+          <div className="relative mb-2 flex items-center gap-2 rounded-xl border border-praxis-cyan/30 bg-praxis-surface2/60 px-3 py-2">
+            <img
+              src={screenshot}
+              alt="Attached screenshot"
+              className="h-14 w-14 rounded-lg object-cover ring-1 ring-praxis-edge"
+            />
+            <div className="flex flex-1 flex-col gap-0.5">
+              <span className="text-xs font-medium text-praxis-cyan">Screenshot attached</span>
+              <span className="text-[11px] text-praxis-muted">
+                {multimodal ? 'Will be analyzed by the interpreter' : 'Text-only fallback — multimodal not enabled'}
+              </span>
+            </div>
+            <button
+              className="grid h-6 w-6 place-items-center rounded-full text-praxis-muted hover:text-red-400"
+              onClick={() => setScreenshot(undefined)}
+              aria-label="Remove screenshot"
+            >
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        )}
         <div
           className={`praxis-card flex items-center gap-2 p-2 ${dragging ? 'ring-2 ring-praxis-cyan/60' : ''}`}
           onDragOver={(e) => {
@@ -60,7 +84,7 @@ export function PromptBar({
           <button
             className="praxis-btn-primary"
             onClick={submit}
-            disabled={!value.trim()}
+            disabled={!value.trim() && !screenshot}
             aria-label="Generate"
           >
             Generate
@@ -77,14 +101,12 @@ export function PromptBar({
                 e.currentTarget.value = ''
               }}
             />
-            {screenshot ? 'Screenshot attached' : 'Attach screenshot'}
+            Attach screenshot
           </label>
           <span>
             {multimodal
               ? 'Image input enabled for interpreter'
-              : screenshot
-                ? 'Text-only fallback active for this screenshot'
-                : 'Keys and models stay on the server.'}
+              : 'Keys and models stay on the server.'}
           </span>
         </div>
         <p className="mt-2 text-center text-xs text-praxis-muted/80">
@@ -95,11 +117,30 @@ export function PromptBar({
   )
 }
 
-async function readAsDataUrl(file: File) {
-  return await new Promise<string>((resolve, reject) => {
+async function compressImage(file: File, maxPx: number, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
     reader.onerror = () => reject(reader.error)
+    reader.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error('Failed to load image'))
+      img.onload = () => {
+        const scale = Math.min(1, maxPx / Math.max(img.width, img.height))
+        const w = Math.round(img.width * scale)
+        const h = Math.round(img.height * scale)
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('Could not get canvas context'))
+          return
+        }
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      }
+      img.src = String(reader.result || '')
+    }
     reader.readAsDataURL(file)
   })
 }

@@ -21,7 +21,10 @@ export function getProviderConfigs() {
         process.env.CEREBRAS_BASE_URL ||
         process.env.MODEL_BASE_URL ||
         '',
-      multimodal: readBoolean(process.env.SPEED_COMPARE_FAST_MULTIMODAL) || readBoolean(process.env.MULTIMODAL_ENABLED),
+      multimodal:
+        readBoolean(process.env.SPEED_COMPARE_FAST_MULTIMODAL) ||
+        readBoolean(process.env.MULTIMODAL_ENABLED) ||
+        Boolean(process.env.CEREBRAS_API_KEY),
     },
     {
       id: 'slow',
