@@ -1,4 +1,5 @@
 import { callModel } from '../callModel.js'
+import { FIXER_SYSTEM_PROMPT } from '../praxisPrompts.js'
 
 /** POST /api/fix
  *  Body: { html: string, error: string }
@@ -14,8 +15,7 @@ export async function handleFix(req, res, next) {
     const messages = [
       {
         role: 'system',
-        content:
-          'You are FIXER. Given HTML and an error description, return corrected HTML. Output only the HTML document.',
+        content: FIXER_SYSTEM_PROMPT,
       },
       {
         role: 'user',

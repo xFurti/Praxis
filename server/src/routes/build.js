@@ -1,4 +1,5 @@
 import { callModel } from '../callModel.js'
+import { BUILDER_SYSTEM_PROMPT } from '../praxisPrompts.js'
 
 /** POST /api/build
  *  Body: { spec: object }
@@ -15,8 +16,7 @@ export async function handleBuild(req, res, next) {
     const messages = [
       {
         role: 'system',
-        content:
-          'You are BUILDER. Generate a self-contained HTML document for the given app spec. Use Praxis design-system classes.',
+        content: BUILDER_SYSTEM_PROMPT,
       },
       { role: 'user', content: JSON.stringify(spec) },
     ]

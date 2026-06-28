@@ -2,6 +2,8 @@
  * @typedef {{ role: 'interpreter' | 'builder' | 'fixer', messages: Array<{role: string, content: string}>, stream?: boolean }} CallModelOpts
  */
 
+const CEREBRAS_BASE_URL = 'https://api.cerebras.ai'
+
 /**
  * callModel({ role, messages, stream })
  *
@@ -13,10 +15,10 @@
  * @returns {Promise<string> | AsyncIterable<string>}
  */
 export async function callModel(opts) {
-  const provider = process.env.PROVIDER || 'mock'
-  const model = process.env.MODEL || 'mock-model'
-  const apiKey = process.env.MODEL_API_KEY || ''
-  const baseUrl = process.env.MODEL_BASE_URL || ''
+  const provider = (process.env.PROVIDER || 'mock').toLowerCase()
+  const model = resolveModel(provider)
+  const apiKey = resolveApiKey(provider)
+  const baseUrl = resolveBaseUrl(provider)
 
   // No real credentials → mock
   if (provider === 'mock' || !apiKey) {
@@ -49,6 +51,30 @@ export async function callModel(opts) {
 
   const data = await res.json()
   return data.choices?.[0]?.message?.content ?? ''
+}
+
+function resolveModel(provider) {
+  if (provider === 'cerebras') {
+    return process.env.CEREBRAS_MODEL || process.env.MODEL || 'llama-3.3-70b'
+  }
+
+  return process.env.MODEL || 'mock-model'
+}
+
+function resolveApiKey(provider) {
+  if (provider === 'cerebras') {
+    return process.env.CEREBRAS_API_KEY || process.env.MODEL_API_KEY || ''
+  }
+
+  return process.env.MODEL_API_KEY || ''
+}
+
+function resolveBaseUrl(provider) {
+  if (provider === 'cerebras') {
+    return process.env.CEREBRAS_BASE_URL || process.env.MODEL_BASE_URL || CEREBRAS_BASE_URL
+  }
+
+  return process.env.MODEL_BASE_URL || ''
 }
 
 /**

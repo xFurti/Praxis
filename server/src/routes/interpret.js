@@ -1,4 +1,5 @@
 import { callModel } from '../callModel.js'
+import { INTERPRETER_SYSTEM_PROMPT } from '../praxisPrompts.js'
 
 /** POST /api/interpret
  *  Body: { prompt: string, screenshot?: string }
@@ -14,8 +15,7 @@ export async function handleInterpret(req, res, next) {
     const messages = [
       {
         role: 'system',
-        content:
-          'You are INTERPRETER. Convert the user prompt into a JSON app specification with fields: name, purpose, components[]. Return only valid JSON.',
+        content: INTERPRETER_SYSTEM_PROMPT,
       },
       { role: 'user', content: screenshot ? `[image attached] ${prompt}` : prompt },
     ]
