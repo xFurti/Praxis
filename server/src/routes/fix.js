@@ -19,7 +19,7 @@ export async function handleFix(req, res, next) {
       },
       {
         role: 'user',
-        content: `HTML:\n${html}\n\nError:\n${error}\n\nReturn the fixed HTML.`,
+        content: `HTML:\n${html}\n\nERRORE:\n${error}\n\nReturn the fixed HTML.`,
       },
     ]
 

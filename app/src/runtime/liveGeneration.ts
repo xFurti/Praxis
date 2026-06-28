@@ -15,6 +15,14 @@ export type LiveGenHandle = {
   cancel: () => void
 }
 
+type FixOptions = {
+  win: AppWindow
+  error: string
+  onUpdate: (id: string, patch: Partial<AppWindow>) => void
+  onStatus: (id: string, status: GenerationStatus) => void
+  onHtml: (id: string, html: string) => void
+}
+
 export function startLiveGeneration(options: LiveGenerationOptions): LiveGenHandle {
   const controller = new AbortController()
 
@@ -31,10 +39,14 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
 
   try {
     onStatus(win.id, 'interpreting')
-    const spec = await interpretPrompt(prompt, signal)
+    const spec = validateSpec(await interpretPrompt(prompt, signal))
     onUpdate(win.id, {
       spec,
       title: spec.app_name || win.title,
+      bounds: {
+        ...win.bounds,
+        ...boundsForWindowSize(spec.window_size),
+      },
     })
 
     onStatus(win.id, 'building')
@@ -45,6 +57,8 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
       onHtml(win.id, html)
     }
 
+    html = await ensureValidHtml(html, 'Generated HTML failed validation.', signal)
+    html = withRuntimeMonitor(html, win.id)
     onHtml(win.id, html)
     onStatus(win.id, 'ready')
   } catch (error) {
@@ -66,6 +80,59 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
   }
 }
 
+export function startFixGeneration(options: FixOptions): LiveGenHandle {
+  const controller = new AbortController()
+
+  void runFix(options, controller.signal)
+
+  return {
+    windowId: options.win.id,
+    cancel: () => controller.abort(),
+  }
+}
+
+async function runFix(options: FixOptions, signal: AbortSignal) {
+  const { win, error, onUpdate, onStatus, onHtml } = options
+
+  try {
+    onStatus(win.id, 'fixing')
+    onUpdate(win.id, {
+      errors: [
+        ...win.errors,
+        {
+          at: new Date().toISOString(),
+          error,
+          applied: false,
+        },
+      ],
+    })
+
+    let fixed = await requestFix(win.html, error, signal)
+    fixed = await ensureValidHtml(fixed, error, signal)
+    fixed = withRuntimeMonitor(fixed, win.id)
+
+    onHtml(win.id, fixed)
+    onUpdate(win.id, {
+      errors: [
+        ...win.errors,
+        {
+          at: new Date().toISOString(),
+          error,
+          applied: true,
+        },
+      ],
+    })
+    onStatus(win.id, 'ready')
+  } catch (fixError) {
+    if (signal.aborted) {
+      return
+    }
+
+    onStatus(win.id, 'error')
+    onHtml(win.id, buildErrorDocument(fixError instanceof Error ? fixError.message : 'Fix failed'))
+  }
+}
+
 async function interpretPrompt(prompt: string, signal: AbortSignal): Promise<AppSpec> {
   const res = await fetch(`${API_BASE_URL}/api/interpret`, {
     method: 'POST',
@@ -84,6 +151,26 @@ async function interpretPrompt(prompt: string, signal: AbortSignal): Promise<App
   }
 
   return data.spec
+}
+
+async function requestFix(html: string, error: string, signal: AbortSignal) {
+  const res = await fetch(`${API_BASE_URL}/api/fix`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html, error }),
+    signal,
+  })
+
+  if (!res.ok) {
+    throw new Error(await readApiError(res, 'Fixer request failed.'))
+  }
+
+  const data = (await res.json()) as { html?: string }
+  if (!data.html) {
+    throw new Error('Fixer returned no HTML.')
+  }
+
+  return data.html
 }
 
 async function* buildStream(spec: AppSpec, signal: AbortSignal) {
@@ -165,6 +252,74 @@ function buildErrorDocument(message: string) {
   return `<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;padding:24px;font-family:Inter,system-ui,sans-serif;background:#070b1a;color:#e6ebff} .card{border:1px solid #243056;background:rgba(18,26,51,.82);border-radius:16px;padding:16px} h1{margin:0 0 12px;font-size:20px} p{margin:0;color:#8b93b8}</style></head><body><div class="card"><h1>Generation failed</h1><p>${escapeHtml(message)}</p></div></body></html>`
 }
 
+function validateSpec(raw: AppSpec) {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Interpreter returned an invalid spec payload.')
+  }
+
+  if (!raw.app_name || !raw.description || !raw.logic) {
+    throw new Error('Interpreter spec is missing required fields.')
+  }
+
+  if (!Array.isArray(raw.components) || raw.components.some((item) => typeof item !== 'string')) {
+    throw new Error('Interpreter spec components must be a string array.')
+  }
+
+  if (!['small', 'medium', 'large'].includes(raw.window_size)) {
+    throw new Error('Interpreter spec has an invalid window_size.')
+  }
+
+  return raw
+}
+
+async function ensureValidHtml(html: string, errorContext: string, signal: AbortSignal) {
+  const validationError = validateGeneratedHtml(html)
+  if (!validationError) {
+    return html
+  }
+
+  const fixed = await requestFix(html, `${errorContext} ${validationError}`, signal)
+  const revalidation = validateGeneratedHtml(fixed)
+  if (revalidation) {
+    throw new Error(`Generated HTML is still invalid after fix: ${revalidation}`)
+  }
+
+  return fixed
+}
+
+function validateGeneratedHtml(html: string) {
+  const text = (html || '').trim().toLowerCase()
+
+  if (!text.startsWith('<!doctype html>') && !text.startsWith('<html')) {
+    return 'Missing <!DOCTYPE html> or <html> root.'
+  }
+  if (!text.includes('<html')) {
+    return 'Missing <html> tag.'
+  }
+  if (!text.includes('<body')) {
+    return 'Missing <body> tag.'
+  }
+  if (!text.includes('</html>')) {
+    return 'Missing closing </html> tag.'
+  }
+
+  return null
+}
+
+function withRuntimeMonitor(html: string, windowId: string) {
+  const monitor = `<script>(function(){if(window.__praxisRuntimeMonitorInstalled)return;window.__praxisRuntimeMonitorInstalled=true;function send(error){try{parent.postMessage({type:'praxis-runtime-error',windowId:${JSON.stringify(windowId)},error:String(error||'Unknown runtime error')},'*')}catch(_e){}}window.addEventListener('error',function(event){send(event.message||event.error&&event.error.message||'Runtime error')});window.addEventListener('unhandledrejection',function(event){var reason=event.reason;send(reason&&reason.message?reason.message:String(reason||'Unhandled promise rejection'))});})();</script>`
+
+  if (html.includes('praxis-runtime-error')) {
+    return html
+  }
+
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${monitor}</body>`)
+  }
+
+  return `${html}${monitor}`
+}
+
 function escapeHtml(text: string) {
   return text
     .replaceAll('&', '&amp;')
@@ -172,4 +327,16 @@ function escapeHtml(text: string) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;')
+}
+
+function boundsForWindowSize(size: AppSpec['window_size']) {
+  if (size === 'small') {
+    return { width: 440, height: 320 }
+  }
+
+  if (size === 'large') {
+    return { width: 760, height: 520 }
+  }
+
+  return { width: 560, height: 400 }
 }

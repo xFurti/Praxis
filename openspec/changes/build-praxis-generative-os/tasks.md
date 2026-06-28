@@ -41,10 +41,10 @@
 
 ## 6. CORE Multi-Agent Generation Flow
 
-- [ ] 6.1 Collegare il submit della prompt bar al ruolo INTERPRETER e validare che l'output sia una spec JSON strutturata e riusabile
-- [ ] 6.2 Collegare l'output dell'INTERPRETER al ruolo BUILDER e renderizzare gli aggiornamenti incrementali in una finestra app dedicata
-- [ ] 6.3 Implementare la logica FIXER per ricevere HTML piu' contesto errore e sostituire il documento della finestra con una versione corretta
-- [ ] 6.4 Aggiungere controlli di validazione minima sul documento HTML generato prima di marcarlo come completato nel runtime
+- [x] 6.1 Collegare il submit della prompt bar al ruolo INTERPRETER e validare che l'output sia una spec JSON strutturata e riusabile
+- [x] 6.2 Collegare l'output dell'INTERPRETER al ruolo BUILDER e renderizzare gli aggiornamenti incrementali in una finestra app dedicata
+- [x] 6.3 Implementare la logica FIXER per ricevere HTML piu' contesto errore e sostituire il documento della finestra con una versione corretta
+- [x] 6.4 Aggiungere controlli di validazione minima sul documento HTML generato prima di marcarlo come completato nel runtime
 
 ## 7. CORE Speed Compare And Multimodality
 
