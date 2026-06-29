@@ -40,3 +40,8 @@ Thumbs.db
 
 # Early prompt drafts (canonical prompts live in server/src/praxisPrompts.js)
 PraxisSystemPrompt.md
+
+# Internal planning / workflow (local only)
+AGENTS.md
+DESIGN_SYSTEM.md
+openspec/
