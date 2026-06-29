@@ -1,9 +1,10 @@
 import { buildThemeStyleBlock } from './themeCss.js'
-import { getThemeById, pickAutoTheme } from './themes.js'
+import { getThemeById } from './themes.js'
 import { BUILDER_BASE_PROMPT, UX_SKILL_PROMPT } from './praxisPrompts.js'
 import { buildBuilderLearningSection } from './learningContext.js'
 import { harmonizeThemeVars, paletteIsComplete } from './colorHarmony.js'
-import { isCalculatorSpec } from './appCategory.js'
+import { applyGenerationVariety, BUILDER_VARIETY_HINT, userSpecifiedVisualStyle } from './visualVariety.js'
+import { getAppTypeProfile } from './appTypePatterns.js'
 
 const STYLE_SOURCES = new Set(['user', 'inferred', 'auto'])
 
@@ -13,52 +14,40 @@ const STYLE_SOURCES = new Set(['user', 'inferred', 'auto'])
  */
 export function enrichSpecDesign(spec) {
   const design = normalizeDesign(spec.design)
+  const userChoseStyle = userSpecifiedVisualStyle(spec)
 
   if (
+    userChoseStyle &&
     (design.style_source === 'user' || design.style_source === 'inferred') &&
     paletteIsComplete(design.palette)
   ) {
-    return {
+    return applyGenerationVariety({
       ...spec,
       design: {
         ...design,
         theme_id: design.theme_id || 'custom',
         theme_name: design.theme_name || (design.style_source === 'user' ? 'User directed' : 'Context inferred'),
       },
-    }
+    })
   }
 
-  const utilityTheme = isCalculatorSpec(spec) ? getThemeById('praxis-core') : null
-
-  if (design.theme_id) {
+  if (userChoseStyle && design.theme_id) {
     const theme = getThemeById(design.theme_id)
-    return {
+    return applyGenerationVariety({
       ...spec,
       design: {
-        style_source: 'auto',
-        theme_id: theme.id,
-        theme_name: theme.name,
+        ...design,
+        style_source: design.style_source || 'auto',
+        theme_name: design.theme_name || theme.name,
         layout: design.layout || theme.defaultLayout,
         personality: design.personality || theme.personality,
         ux_notes: design.ux_notes || theme.uxNotes,
         palette: design.palette,
       },
-    }
+    })
   }
 
-  const theme = utilityTheme || pickAutoTheme()
-  return {
-    ...spec,
-    design: {
-      style_source: 'auto',
-      theme_id: theme.id,
-      theme_name: theme.name,
-      layout: design.layout || theme.defaultLayout,
-      personality: design.personality || theme.personality,
-      ux_notes: design.ux_notes || theme.uxNotes,
-      palette: design.palette,
-    },
-  }
+  return applyGenerationVariety(spec)
 }
 
 /**
@@ -69,15 +58,22 @@ export async function buildBuilderSystemPrompt(spec, options = {}) {
   const design = normalizeDesign(spec.design)
   const { css, brief } = resolveThemeForBuild(design)
   const learning = await buildBuilderLearningSection(spec, options)
+  const profile = getAppTypeProfile(spec)
 
   const uxFromSpec = design.ux_notes ? `SPEC UX NOTES:\n${design.ux_notes}` : ''
 
   const sections = [
     BUILDER_BASE_PROMPT,
     UX_SKILL_PROMPT,
+    BUILDER_VARIETY_HINT,
     learning,
     uxFromSpec,
+    `APP TYPE BLUEPRINT (${profile.category} — structural guide only, vary visual execution):\n${profile.builderBrief}`,
     `VISUAL DIRECTION:\n${brief}`,
+    design.aesthetic_family ? `AESTHETIC FAMILY: ${design.aesthetic_family}` : null,
+    design.avoid_cliches ? `STYLE AVOID: ${design.avoid_cliches}` : null,
+    design.composition_directive ? `COMPOSITION:\n${design.composition_directive}` : null,
+    design.visual_variant ? `VISUAL VARIANT: ${design.visual_variant}` : null,
     `DESIGN SYSTEM (embed this <style> in the document):\n${css}`,
   ].filter(Boolean)
 
@@ -106,23 +102,29 @@ function resolveThemeForBuild(design) {
     css: theme.css,
     brief: [
       `Theme: ${theme.name} (${design.style_source})`,
+      design.aesthetic_family ? `Aesthetic family: ${design.aesthetic_family}` : null,
       `Personality: ${design.personality || theme.personality}`,
       `Layout: ${design.layout || theme.defaultLayout}`,
       design.ux_notes ? `UX notes: ${design.ux_notes}` : `UX notes: ${theme.uxNotes}`,
-      'Make this app feel distinct within the theme — vary composition, spacing rhythm, and component arrangement. Do not copy a generic template.',
-    ].join('\n'),
+      design.avoid_cliches ? design.avoid_cliches : null,
+      'Make this app feel distinct — vary composition and control styling. Do not copy a generic template.',
+    ]
+      .filter(Boolean)
+      .join('\n'),
   }
 }
 
 function buildCustomBrief(design) {
   const lines = [
     `Style source: ${design.style_source} — honor the user's or inferred visual direction faithfully.`,
+    design.aesthetic_family ? `Aesthetic family: ${design.aesthetic_family}` : null,
     design.personality ? `Personality: ${design.personality}` : null,
     design.layout ? `Layout: ${design.layout}` : null,
     design.ux_notes ? `UX notes: ${design.ux_notes}` : null,
     design.palette
       ? `Palette: background ${design.palette.background || '—'}, accent ${design.palette.accent || '—'}, text ${design.palette.text || '—'}`
       : null,
+    design.avoid_cliches ? design.avoid_cliches : null,
     'Use .praxis-* classes but override CSS variables and add custom rules to match this direction.',
     'Prioritize visual fidelity to the described style over generic Praxis defaults.',
   ]
@@ -173,6 +175,13 @@ function normalizeDesign(design) {
     layout: typeof design.layout === 'string' ? design.layout : undefined,
     personality: typeof design.personality === 'string' ? design.personality : undefined,
     ux_notes: typeof design.ux_notes === 'string' ? design.ux_notes : undefined,
+    composition_directive:
+      typeof design.composition_directive === 'string' ? design.composition_directive : undefined,
+    visual_variant: typeof design.visual_variant === 'string' ? design.visual_variant : undefined,
+    aesthetic_family: typeof design.aesthetic_family === 'string' ? design.aesthetic_family : undefined,
+    avoid_cliches: typeof design.avoid_cliches === 'string' ? design.avoid_cliches : undefined,
+    generation_nonce: typeof design.generation_nonce === 'string' ? design.generation_nonce : undefined,
+    calc_variant: typeof design.calc_variant === 'string' ? design.calc_variant : undefined,
     palette: normalizePalette(design.palette),
     custom_css: typeof design.custom_css === 'string' ? design.custom_css : undefined,
   }

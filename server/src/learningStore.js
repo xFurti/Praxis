@@ -39,7 +39,7 @@ async function loadStore() {
 
   try {
     const raw = await fs.readFile(STORE_PATH, 'utf8')
-    cache = JSON.parse(raw)
+    cache = migrateStore(JSON.parse(raw))
     return cache
   } catch {
     cache = { version: 1, records: [], ui_lessons: [] }
@@ -51,6 +51,39 @@ async function saveStore(store) {
   await fs.mkdir(path.dirname(STORE_PATH), { recursive: true })
   await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), 'utf8')
   cache = store
+}
+
+/** @param {LearningStore} store */
+function migrateStore(store) {
+  if (!store || typeof store !== 'object') {
+    return { version: 1, records: [], ui_lessons: [] }
+  }
+
+  const lessons = Array.isArray(store.ui_lessons) ? store.ui_lessons : []
+  const migrated = []
+  const seen = new Set()
+
+  for (const raw of lessons) {
+    const text = String(raw || '').trim()
+    if (!text) continue
+
+    let lesson = text
+    const legacy = text.match(/^After "[^"]+" \(([^)]+)\): users asked — (.+)$/i)
+    if (legacy) {
+      lesson = `Quality fix (${legacy[1]}): ${legacy[2].trim()}`
+    }
+
+    const key = sanitizeStoredLesson(lesson)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    migrated.push(lesson)
+  }
+
+  return {
+    version: store.version || 1,
+    records: Array.isArray(store.records) ? store.records : [],
+    ui_lessons: migrated,
+  }
 }
 
 function median(values) {
@@ -123,8 +156,9 @@ export async function recordLearning(entry) {
   }
 
   if (record.refined && record.refinement_note) {
-    const lesson = `After "${record.app_name}" (${record.category}): users asked — ${record.refinement_note}`
-    if (!store.ui_lessons.includes(lesson)) {
+    const note = record.refinement_note.trim().slice(0, 240)
+    const lesson = `Quality fix (${record.category}): ${note}`
+    if (note && !store.ui_lessons.some((existing) => sanitizeStoredLesson(existing) === note)) {
       store.ui_lessons.unshift(lesson)
     }
   }
@@ -159,4 +193,14 @@ export async function getLearnedSizeHints() {
   }
 
   return hints
+}
+
+/** Normalize lesson text for deduplication. */
+function sanitizeStoredLesson(lesson) {
+  const text = String(lesson || '').trim()
+  const legacy = text.match(/^After "[^"]+" \([^)]+\): users asked — (.+)$/i)
+  if (legacy) return legacy[1].trim()
+  const quality = text.match(/^Quality (?:lesson|fix) \([^)]+\): (.+)$/i)
+  if (quality) return quality[1].trim()
+  return text
 }

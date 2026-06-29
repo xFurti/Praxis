@@ -5,6 +5,7 @@ import { enrichSpecDesign } from '../styleDirector.js'
 import { parseSpec } from '../specUtils.js'
 import { getDefaultInterpreterProvider } from '../providerConfig.js'
 import { attachSourcePrompt } from '../specPipeline.js'
+import { INTERPRETER_VARIETY_HINT } from '../visualVariety.js'
 
 /** POST /api/interpret
  *  Body: { prompt: string, screenshot?: string }
@@ -23,11 +24,11 @@ export async function handleInterpret(req, res, next) {
     const messages = [
       {
         role: 'system',
-        content: INTERPRETER_SYSTEM_PROMPT + learning,
+        content: INTERPRETER_SYSTEM_PROMPT + '\n\n' + INTERPRETER_VARIETY_HINT + learning,
       },
       {
         role: 'user',
-        content: `USER REQUEST:\n${prompt}\n\nProduce the JSON app spec for exactly this request.`,
+        content: `USER REQUEST:\n${prompt}\n\nProduce the JSON app spec for exactly this request. Give it a unique visual identity — do not reuse a generic default look.`,
       },
     ]
 

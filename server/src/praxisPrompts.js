@@ -22,10 +22,12 @@ OUTPUT RULES:
 
 design.style_source:
 - "user" — user named colors, aesthetic, mood, or style.
-- "inferred" — app type implies a look (game, terminal, shop, etc.).
-- "auto" — no visual cues; set only { "style_source": "auto" }.
+- "inferred" — user specified a visual direction; include full palette.
+- "auto" — user did NOT specify style; set only { "style_source": "auto" } — server picks a unique aesthetic.
 
-If you set design.palette, include background, text, surface, and accent together. Light backgrounds need dark text; dark backgrounds need light text.
+If the user only names the app type (e.g. "calcolatrice", "todo list") without colors or mood, use "auto" with NO palette — do not invent neon/cyberpunk defaults.
+
+Every spec must look visually distinct from prior builds.
 
 SCHEMA:
 {
@@ -61,7 +63,8 @@ RULES:
 4. <body class="praxis-app">; add praxis-fit for compact apps. Main UI in .praxis-card.
 5. No fetch, no localStorage. State in memory.
 6. Must run without console errors on first load.
-7. Embed the provided design system <style> block in the document.`
+7. Embed the provided design system <style> block in the document.
+8. Every build must look visually unique — vary composition, colors, typography, and control styling. Never output a generic clone.`
 
 export const FIXER_SYSTEM_PROMPT = String.raw`You are the FIXER of Praxis. Return corrected HTML for the same app.
 

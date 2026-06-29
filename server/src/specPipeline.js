@@ -1,6 +1,4 @@
-/**
- * Helpers to keep spec identity stable across interpreter → verify → build.
- */
+import { buildVarietyContext } from './visualVariety.js'
 
 /**
  * @param {Record<string, unknown>} spec
@@ -61,6 +59,12 @@ export function mergeSpecIdentity(original, next) {
       theme_id: nextDesign.theme_id || prevDesign.theme_id,
       theme_name: nextDesign.theme_name || prevDesign.theme_name,
       style_source: nextDesign.style_source || prevDesign.style_source,
+      composition_directive:
+        nextDesign.composition_directive || prevDesign.composition_directive,
+      visual_variant: nextDesign.visual_variant || prevDesign.visual_variant,
+      aesthetic_family: nextDesign.aesthetic_family || prevDesign.aesthetic_family,
+      avoid_cliches: nextDesign.avoid_cliches || prevDesign.avoid_cliches,
+      generation_nonce: nextDesign.generation_nonce || prevDesign.generation_nonce,
     }
   }
 
@@ -101,5 +105,11 @@ export function buildBuilderUserMessage(spec, sourcePrompt = '') {
   }
 
   lines.push(`APP SPEC (implement every component and behavior):\n${JSON.stringify(clean, null, 2)}`)
+
+  const variety = buildVarietyContext(spec)
+  if (variety) {
+    lines.push(variety)
+  }
+
   return lines.join('\n\n')
 }

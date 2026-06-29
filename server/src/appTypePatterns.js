@@ -43,8 +43,14 @@ export function enrichSpecForAppType(spec) {
 const PATTERNS = {
   calculator: {
     windowSize: 'small',
-    uxNotes: 'Standard calculator keypad with display and arithmetic operators.',
-    builderBrief: 'Calculators use a server-side layout template — focus theming only if you see this message in error.',
+    uxNotes: 'Calculator: display + keypad. Vary visual style each build — never clone a previous calculator look.',
+    builderBrief: `CALCULATOR BLUEPRINT (vary visual execution every time):
+- body.praxis-app.praxis-fit, single .praxis-card sized to content (~260–320px wide).
+- .praxis-readout for the display (right-aligned, tabular nums).
+- .praxis-calc-pad: 4-column CSS grid, 5 rows — digits 0-9, ., C, +, −, ×, ÷, =.
+- Tall + button spanning 2 rows; tall = button spanning 2 rows in last column.
+- Implement full arithmetic in inline <script>.
+- UNIQUE LOOK REQUIRED: vary palette usage, button shapes, display framing, card border, and background treatment.`,
   },
   todo: {
     windowSize: 'small',
@@ -119,6 +125,7 @@ const PATTERNS = {
 - ONE primary .praxis-card (or clearly separated sections). No meta chips labeling the theme or app name unless the spec asks for branding.
 - Match component count from spec — every listed component must appear and work.
 - Prefer CSS grid or flex with explicit gaps; align baselines; equal-size controls in grids.
-- No nested scroll areas unless the spec needs a long list/table.`,
+- No nested scroll areas unless the spec needs a long list/table.
+- Every build must look visually distinct — vary palette usage, typography, spacing, and control styling.`,
   },
 }

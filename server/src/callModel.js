@@ -52,6 +52,7 @@ export async function callModel(opts) {
         messages: opts.messages,
         stream: !!opts.stream,
         max_tokens: 32768,
+        temperature: resolveTemperature(opts.role),
       }),
       signal: AbortSignal.timeout(60000),
     })
@@ -128,6 +129,16 @@ function resolveApiKey(provider, opts = {}) {
   }
 
   return process.env.MODEL_API_KEY || ''
+}
+
+function resolveTemperature(role) {
+  if (role === 'interpreter' || role === 'builder' || role === 'refiner') {
+    return 0.88
+  }
+  if (role === 'verifier-spec' || role === 'verifier-publish' || role === 'fixer') {
+    return 0.35
+  }
+  return 0.7
 }
 
 function resolveBaseUrl(provider, opts = {}) {

@@ -253,16 +253,25 @@ export const THEME_PACKS = [
 
 const AUTO_THEME_POOL = THEME_PACKS.filter((theme) => theme.id !== 'praxis-core')
 
-/** @type {string | null} */
-let lastAutoThemeId = null
-
 export function getThemeById(id) {
   return THEME_PACKS.find((theme) => theme.id === id) ?? THEME_PACKS[0]
 }
 
+/** @type {string[]} */
+const recentAutoThemeIds = []
+
 export function pickAutoTheme() {
-  const pool = AUTO_THEME_POOL.filter((theme) => theme.id !== lastAutoThemeId)
+  const blocked = new Set(recentAutoThemeIds.slice(-3))
+  let pool = AUTO_THEME_POOL.filter((theme) => !blocked.has(theme.id))
+
+  if (!pool.length) {
+    pool = AUTO_THEME_POOL.filter((theme) => theme.id !== recentAutoThemeIds.at(-1))
+  }
+
   const theme = pool[Math.floor(Math.random() * pool.length)] ?? AUTO_THEME_POOL[0] ?? THEME_PACKS[0]
-  lastAutoThemeId = theme.id
+  recentAutoThemeIds.push(theme.id)
+  if (recentAutoThemeIds.length > 6) {
+    recentAutoThemeIds.shift()
+  }
   return theme
 }
