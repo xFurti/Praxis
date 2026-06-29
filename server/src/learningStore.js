@@ -2,6 +2,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+export { deriveCategory } from './appCategory.js'
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const STORE_PATH = path.join(__dirname, '../data/gemma-learning.json')
 const MAX_RECORDS = 120
@@ -49,28 +51,6 @@ async function saveStore(store) {
   await fs.mkdir(path.dirname(STORE_PATH), { recursive: true })
   await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), 'utf8')
   cache = store
-}
-
-export function deriveCategory(specOrText) {
-  const text =
-    typeof specOrText === 'string'
-      ? specOrText.toLowerCase()
-      : `${specOrText.app_name} ${specOrText.description} ${specOrText.logic} ${(specOrText.components || []).join(' ')}`.toLowerCase()
-
-  if (text.includes('calculator') || text.includes('calc')) return 'calculator'
-  if (text.includes('spreadsheet') || text.includes('sheet') || text.includes('csv')) return 'spreadsheet'
-  if (text.includes('store') || text.includes('shop') || text.includes('market')) return 'store'
-  if (text.includes('todo') || text.includes('task') || text.includes('checklist')) return 'todo'
-  if (text.includes('timer') || text.includes('pomodoro') || text.includes('stopwatch')) return 'timer'
-  if (text.includes('dashboard') || text.includes('chart') || text.includes('analytics')) return 'dashboard'
-  if (text.includes('form') || text.includes('survey') || text.includes('signup')) return 'form'
-  if (text.includes('game') || text.includes('puzzle') || text.includes('quiz')) return 'game'
-  if (text.includes('note') || text.includes('editor') || text.includes('markdown')) return 'notes'
-
-  if (typeof specOrText === 'object' && specOrText.window_size === 'small') return 'compact'
-  if (typeof specOrText === 'object' && specOrText.window_size === 'large') return 'expansive'
-
-  return 'general'
 }
 
 function median(values) {

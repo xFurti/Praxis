@@ -20,27 +20,36 @@ export function AppFrame({ win }: AppFrameProps) {
   const building =
     win.status === 'building' || win.status === 'interpreting' || win.status === 'fixing'
   const verifying = win.status === 'verifying'
+  const showPlaceholder =
+    (building && !win.html) || (verifying && !win.html) || win.status === 'interpreting'
 
-  if ((building && !win.html) || verifying) {
+  if (showPlaceholder) {
     return <GenerationPlaceholder status={verifying ? 'verifying' : win.status} />
   }
 
   const iframeKey =
-    win.status === 'ready' || win.status === 'error'
+    win.status === 'ready' || win.status === 'error' || verifying
       ? `${win.id}-final-${win.html.length}`
       : `${win.id}-streaming`
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div className={`absolute inset-0 ${win.fullscreen ? 'overflow-auto' : 'overflow-hidden'}`}>
       <iframe
         key={iframeKey}
         title={win.title}
-        className="h-full w-full border-0 bg-white"
+        className={`w-full border-0 bg-white ${win.fullscreen ? 'min-h-full' : 'h-full'}`}
         srcDoc={win.html}
         sandbox="allow-scripts allow-forms allow-popups allow-modals"
+        scrolling={win.fullscreen ? 'yes' : 'no'}
         style={{ pointerEvents: interacting ? 'none' : 'auto' }}
       />
       {building && win.html && <StreamingOverlay status={win.status} />}
+      {verifying && (
+        <div
+          className="pointer-events-none absolute inset-0 bg-praxis-navy/10 ring-1 ring-inset ring-praxis-violet/20"
+          aria-hidden="true"
+        />
+      )}
     </div>
   )
 }

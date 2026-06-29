@@ -1,17 +1,40 @@
 import { callModel } from '../callModel.js'
 import { buildBuilderSystemPrompt } from '../styleDirector.js'
 import { getProviderConfigs } from '../providerConfig.js'
+import { isCalculatorSpec } from '../appCategory.js'
+import { buildCalculatorHtml, chunkHtmlForStream } from '../templates/calculatorTemplate.js'
+import { buildBuilderUserMessage } from '../specPipeline.js'
 
 /** POST /api/build
- *  Body: { spec: object }
+ *  Body: { spec: object, source_prompt?: string }
  *  If Accept: text/event-stream → stream HTML chunks via SSE
  *  Otherwise → return full HTML
  */
 export async function handleBuild(req, res, next) {
   try {
-    const { spec, provider: providerId } = req.body
+    const { spec, provider: providerId, source_prompt: sourcePrompt } = req.body
     if (!spec) {
       return res.status(400).json({ error: 'spec is required' })
+    }
+
+    const streaming = req.headers.accept?.includes('text/event-stream')
+    const userPrompt = String(sourcePrompt || spec._source_prompt || '')
+
+    if (isCalculatorSpec(spec)) {
+      const html = buildCalculatorHtml(spec)
+      if (streaming) {
+        res.setHeader('Content-Type', 'text/event-stream')
+        res.setHeader('Cache-Control', 'no-cache')
+        res.setHeader('Connection', 'keep-alive')
+        for (const chunk of chunkHtmlForStream(html)) {
+          res.write(`data: ${JSON.stringify({ chunk })}\n\n`)
+        }
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
+        res.end()
+      } else {
+        res.json({ html })
+      }
+      return
     }
 
     const messages = [
@@ -19,11 +42,13 @@ export async function handleBuild(req, res, next) {
         role: 'system',
         content: await buildBuilderSystemPrompt(spec, { providerId }),
       },
-      { role: 'user', content: JSON.stringify(spec) },
+      {
+        role: 'user',
+        content: buildBuilderUserMessage(spec, userPrompt),
+      },
     ]
 
     const providerOpts = resolveProviderOpts(providerId)
-    const streaming = req.headers.accept?.includes('text/event-stream')
 
     if (streaming) {
       res.setHeader('Content-Type', 'text/event-stream')

@@ -32,8 +32,11 @@ export function estimateFromHtml(html: string): SizeEstimate | null {
     const rows = gridRows ? Number(gridRows[1]) : Math.max(4, Math.ceil(buttonCount / Math.max(cols, 1)))
     return { width: cols * 68 + 64, height: rows * 68 + 140 }
   }
-  if (buttonCount >= 12 || lower.includes('calculator')) {
+  if (lower.includes('praxis-calc-pad') || (/\bcalculator\b/.test(lower) && buttonCount >= 12)) {
     return { width: 340, height: 500 }
+  }
+  if (/\b(game|gaming|simulator|sim)\b/.test(lower)) {
+    return { width: 560, height: 480 }
   }
 
   return null

@@ -26,6 +26,8 @@ export type AppWindow = {
   bounds: WindowBounds
   zIndex: number
   minimized: boolean
+  fullscreen: boolean
+  restoreBounds?: WindowBounds
   status: GenerationStatus
   html: string
   spec?: unknown

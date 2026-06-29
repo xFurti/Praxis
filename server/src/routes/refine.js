@@ -3,6 +3,7 @@ import { REFINER_SYSTEM_PROMPT } from '../praxisPrompts.js'
 import { enrichSpecDesign } from '../styleDirector.js'
 import { parseSpec } from '../specUtils.js'
 import { getDefaultInterpreterProvider } from '../providerConfig.js'
+import { attachSourcePrompt, mergeSpecIdentity } from '../specPipeline.js'
 
 /** POST /api/refine
  *  Body: { spec: object, changeRequest: string }
@@ -37,7 +38,11 @@ export async function handleRefine(req, res, next) {
       messages,
     })
 
-    res.json({ spec: enrichSpecDesign(parseSpec(result, 'Refiner')) })
+    const parsed = parseSpec(result, 'Refiner')
+    const merged = mergeSpecIdentity(spec, parsed)
+    const withPrompt = attachSourcePrompt(merged, changeRequest.trim())
+
+    res.json({ spec: enrichSpecDesign(withPrompt) })
   } catch (err) {
     next(err)
   }

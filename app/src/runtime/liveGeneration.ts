@@ -3,6 +3,7 @@ import { applyBuildSizeUpdate } from './contentSizeEstimator'
 import { withRuntimeMonitor } from './runtimeMonitor'
 import { defaultWindowBoundsForSpec, fitWindowToContent } from '../windows/windowSizing'
 import { measureHtmlContent } from './publishVerifier'
+import { settleWindowDimensions } from './windowDimensionSettle'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 const SLOW_BENCHMARK_MS = 12000
@@ -72,7 +73,7 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
     notifyBuildStart()
     onStatus(win.id, 'interpreting')
     let spec = validateSpec(await interpretPrompt(prompt, screenshot, signal))
-    spec = await verifySpecBeforeBuild(spec, signal)
+    spec = await verifySpecBeforeBuild(spec, signal, prompt)
     window.__praxisLastSpec = spec
     window.dispatchEvent(new Event('praxis-spec-ready'))
 
@@ -120,15 +121,30 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
 
     html = stripHtmlFences(html)
     html = await ensureValidHtml(html, 'Generated HTML failed validation.', signal)
-    html = await finalizeForPublish({
+    const publishResult = await finalizeForPublish({
       win,
       spec,
       html,
-      onUpdate,
+      bounds: currentBounds,
+      onUpdate: (id, patch) => {
+        if (patch.bounds) currentBounds = patch.bounds
+        onUpdate(id, patch)
+      },
       onStatus,
       signal,
     })
+    html = publishResult.html
+    currentBounds = publishResult.bounds
     onHtml(win.id, html)
+    await settleWindowDimensions({
+      windowId: win.id,
+      bounds: currentBounds,
+      onUpdate: (id, patch) => {
+        currentBounds = patch.bounds
+        onUpdate(id, { bounds: patch.bounds })
+      },
+      signal,
+    })
     onStatus(win.id, 'ready')
 
     onTokensPerSec?.(finalTokPerSec, latestSlow)
@@ -170,7 +186,11 @@ async function runRefine(options: RefineOptions, signal: AbortSignal) {
     onHtml(win.id, '')
 
     const spec = validateSpec(await refineSpec(currentSpec, changeRequest, signal))
-    const verifiedSpec = await verifySpecBeforeBuild(spec, signal)
+      const verifiedSpec = await verifySpecBeforeBuild(
+        spec,
+        signal,
+        (spec as AppSpec & { _source_prompt?: string })._source_prompt || changeRequest,
+      )
     window.__praxisLastSpec = verifiedSpec
     window.dispatchEvent(new Event('praxis-spec-ready'))
 
@@ -218,15 +238,30 @@ async function runRefine(options: RefineOptions, signal: AbortSignal) {
 
     html = stripHtmlFences(html)
     html = await ensureValidHtml(html, 'Refined HTML failed validation.', signal)
-    html = await finalizeForPublish({
+    const publishResult = await finalizeForPublish({
       win,
       spec: verifiedSpec,
       html,
-      onUpdate,
+      bounds: currentBounds,
+      onUpdate: (id, patch) => {
+        if (patch.bounds) currentBounds = patch.bounds
+        onUpdate(id, patch)
+      },
       onStatus,
       signal,
     })
+    html = publishResult.html
+    currentBounds = publishResult.bounds
     onHtml(win.id, html)
+    await settleWindowDimensions({
+      windowId: win.id,
+      bounds: currentBounds,
+      onUpdate: (id, patch) => {
+        currentBounds = patch.bounds
+        onUpdate(id, { bounds: patch.bounds })
+      },
+      signal,
+    })
     onStatus(win.id, 'ready')
 
     onTokensPerSec?.(finalTokPerSec, latestSlow)
@@ -383,13 +418,14 @@ async function requestFix(html: string, error: string, signal: AbortSignal) {
 }
 
 async function* buildStream(spec: AppSpec, signal: AbortSignal, provider?: 'fast' | 'slow') {
+  const sourcePrompt = (spec as AppSpec & { _source_prompt?: string })._source_prompt
   const res = await fetch(`${API_BASE_URL}/api/build`, {
     method: 'POST',
     headers: {
       Accept: 'text/event-stream',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ spec, provider }),
+    body: JSON.stringify({ spec, provider, source_prompt: sourcePrompt }),
     signal,
   })
 
@@ -486,11 +522,15 @@ function validateSpec(raw: AppSpec) {
   return raw
 }
 
-async function verifySpecBeforeBuild(spec: AppSpec, signal: AbortSignal): Promise<AppSpec> {
+async function verifySpecBeforeBuild(
+  spec: AppSpec,
+  signal: AbortSignal,
+  sourcePrompt = '',
+): Promise<AppSpec> {
   const res = await fetch(`${API_BASE_URL}/api/verify/spec`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ spec }),
+    body: JSON.stringify({ spec, source_prompt: sourcePrompt }),
     signal,
   })
 
@@ -499,7 +539,15 @@ async function verifySpecBeforeBuild(spec: AppSpec, signal: AbortSignal): Promis
   }
 
   const data = (await res.json()) as { spec?: AppSpec }
-  return data.spec ? validateSpec(data.spec) : spec
+  if (!data.spec) {
+    return spec
+  }
+
+  try {
+    return validateSpec(data.spec)
+  } catch {
+    return spec
+  }
 }
 
 async function requestVerifyPublish(
@@ -537,12 +585,14 @@ async function finalizeForPublish(options: {
   win: AppWindow
   spec: AppSpec
   html: string
+  bounds: WindowBounds
   onUpdate: (id: string, patch: Partial<AppWindow>) => void
   onStatus: (id: string, status: GenerationStatus) => void
   signal: AbortSignal
-}) {
-  const { win, spec, html: inputHtml, onUpdate, onStatus, signal } = options
+}): Promise<{ html: string; bounds: WindowBounds }> {
+  const { win, spec, html: inputHtml, bounds, onUpdate, onStatus, signal } = options
   let html = withRuntimeMonitor(inputHtml, win.id)
+  let nextBounds = bounds
 
   onStatus(win.id, 'verifying')
 
@@ -561,17 +611,18 @@ async function finalizeForPublish(options: {
     measured = await measureHtmlContent(html).catch(() => measured)
   }
 
+  onStatus(win.id, 'verifying')
+
   if (measured) {
-    onUpdate(win.id, {
-      bounds: fitWindowToContent(measured.width, measured.height, win.bounds),
-    })
+    nextBounds = fitWindowToContent(measured.width, measured.height, nextBounds)
+    onUpdate(win.id, { bounds: nextBounds })
   }
 
   if (!publish.ok && publish.issues?.length) {
     console.warn('[praxis] publish verification notes:', publish.issues)
   }
 
-  return html
+  return { html, bounds: nextBounds }
 }
 
 async function ensureValidHtml(html: string, errorContext: string, signal: AbortSignal) {
@@ -689,15 +740,30 @@ async function runProviderPreview(
 
     html = stripHtmlFences(html)
     html = await ensureValidHtml(html, 'Generated HTML failed validation.', signal)
-    html = await finalizeForPublish({
+    const publishResult = await finalizeForPublish({
       win,
       spec,
       html,
-      onUpdate,
+      bounds: currentBounds,
+      onUpdate: (id, patch) => {
+        if (patch.bounds) currentBounds = patch.bounds
+        onUpdate(id, patch)
+      },
       onStatus,
       signal,
     })
+    html = publishResult.html
+    currentBounds = publishResult.bounds
     onHtml(win.id, html)
+    await settleWindowDimensions({
+      windowId: win.id,
+      bounds: currentBounds,
+      onUpdate: (id, patch) => {
+        currentBounds = patch.bounds
+        onUpdate(id, { bounds: patch.bounds })
+      },
+      signal,
+    })
     onStatus(win.id, 'ready')
   } catch (error) {
     if (signal.aborted) {

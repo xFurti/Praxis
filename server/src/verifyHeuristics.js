@@ -1,9 +1,11 @@
-import { deriveCategory, getSizeCalibration, getLearningStore } from './learningStore.js'
+import { deriveCategory, detectSpecIntentMismatch } from './appCategory.js'
+import { getSizeCalibration, getLearningStore } from './learningStore.js'
 
 /**
  * @param {Record<string, unknown>} spec
+ * @param {string} [sourcePrompt]
  */
-export function verifySpecHeuristics(spec) {
+export function verifySpecHeuristics(spec, sourcePrompt = '') {
   /** @type {string[]} */
   const issues = []
   /** @type {Record<string, unknown>} */
@@ -12,6 +14,8 @@ export function verifySpecHeuristics(spec) {
   if (!Array.isArray(spec.components) || spec.components.length === 0) {
     issues.push('Spec has no components — add at least one UI element.')
   }
+
+  issues.push(...detectSpecIntentMismatch(spec, sourcePrompt))
 
   const logic = String(spec.logic || '')
   const componentText = (spec.components || []).join(' ').toLowerCase()
@@ -37,6 +41,24 @@ export function verifySpecHeuristics(spec) {
     patches.window_size = 'medium'
   }
 
+  const category = deriveCategory(spec)
+  if (category === 'calculator') {
+    if (windowSize === 'large' || windowSize === 'medium') {
+      issues.push('Calculators should use window_size small for a compact keypad layout.')
+      patches.window_size = 'small'
+      windowSize = 'small'
+    }
+    const ux = String(spec.design?.ux_notes || '')
+    if (!ux.toLowerCase().includes('grid') && !ux.toLowerCase().includes('calc')) {
+      patches.design = {
+        ...(spec.design && typeof spec.design === 'object' ? spec.design : {}),
+        ux_notes:
+          'Compact calculator: single card ~300px wide, .praxis-readout + 4×5 .praxis-calc-pad grid, standard operator layout.',
+      }
+      issues.push('Calculator spec missing layout guidance — added keypad grid ux_notes.')
+    }
+  }
+
   return { issues, patches, window_size: windowSize }
 }
 
@@ -58,6 +80,22 @@ export async function verifyPublishHeuristics(spec, html, measured = {}) {
     issues.push('Missing .praxis-card wrapper for the main UI.')
   }
 
+  const category = deriveCategory(spec)
+
+  if (category === 'game' && (text.includes('praxis-calc-pad') || text.includes('data-action="digit"'))) {
+    issues.push('HTML looks like a calculator but the spec is not — rebuild to match the spec.')
+  }
+
+  if (category !== 'calculator' && text.includes('praxis-calc-pad')) {
+    issues.push('Calculator keypad detected in HTML but spec is not a calculator.')
+  }
+
+  if (text.includes('100vh') || text.includes('min-height: 100%')) {
+    if (category === 'calculator' || category === 'todo' || category === 'timer' || category === 'compact') {
+      issues.push('Full-viewport height wrapper detected on a compact app — use body.praxis-fit and size to content.')
+    }
+  }
+
   if (/<script[^>]+src=/i.test(html)) {
     issues.push('External script src detected — apps must be fully self-contained.')
   }
@@ -67,7 +105,6 @@ export async function verifyPublishHeuristics(spec, html, measured = {}) {
   }
 
   const store = await getLearningStore()
-  const category = deriveCategory(spec)
   const cal = getSizeCalibration(store, category)
 
   const width = measured.content_width
@@ -121,5 +158,5 @@ export function buildPublishFixHint(issues) {
     return ''
   }
 
-  return `PRE-PUBLISH VERIFICATION failed. Fix these before shipping:\n${blockers.map((i) => `- ${i}`).join('\n')}\nPreserve all working behavior. Ensure body has class praxis-app and main UI uses praxis-card. Fit content compactly without excess whitespace or viewport-filling wrappers.`
+  return `PRE-PUBLISH VERIFICATION failed. Fix these before shipping:\n${blockers.map((i) => `- ${i}`).join('\n')}\nPreserve all working behavior. Ensure body has class praxis-app (add praxis-fit for compact apps) and main UI uses praxis-card. Fit content compactly without excess whitespace or viewport-filling wrappers. For calculators use .praxis-readout and .praxis-calc-pad with equal-size keys.`
 }

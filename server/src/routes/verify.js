@@ -1,6 +1,5 @@
 import { callModel } from '../callModel.js'
 import { VERIFIER_SPEC_PROMPT, VERIFIER_PUBLISH_PROMPT } from '../praxisPrompts.js'
-import { enrichSpecDesign } from '../styleDirector.js'
 import { parseSpec } from '../specUtils.js'
 import { getDefaultInterpreterProvider } from '../providerConfig.js'
 import {
@@ -10,30 +9,38 @@ import {
   splitPublishIssues,
 } from '../verifyHeuristics.js'
 import { deriveCategory, getSizeCalibration, getLearningStore } from '../learningStore.js'
+import {
+  filterSpecIssuesForModel,
+  mergeSpecIdentity,
+} from '../specPipeline.js'
 
 /** POST /api/verify/spec */
 export async function handleVerifySpec(req, res, next) {
   try {
-    const { spec } = req.body
+    const { spec, source_prompt: sourcePrompt } = req.body
     if (!spec || typeof spec !== 'object') {
       return res.status(400).json({ error: 'spec is required' })
     }
 
-    const heuristic = verifySpecHeuristics(spec)
+    const prompt = String(sourcePrompt || spec._source_prompt || '')
+    const heuristic = verifySpecHeuristics(spec, prompt)
     let nextSpec = applySpecPatches(spec, heuristic.patches)
-    nextSpec = enrichSpecDesign(await augmentSpecWithSizing(nextSpec))
+    nextSpec = augmentSpecWithSizing(nextSpec)
 
     let modelIssues = []
-    if (heuristic.issues.length > 0) {
+    const modelIssuesToFix = filterSpecIssuesForModel(heuristic.issues)
+
+    if (modelIssuesToFix.length > 0) {
       try {
-        nextSpec = await runSpecModelVerify(nextSpec, heuristic.issues)
+        const verified = await runSpecModelVerify(nextSpec, modelIssuesToFix, prompt)
+        nextSpec = mergeSpecIdentity(spec, verified)
         modelIssues = []
       } catch {
         modelIssues = ['Model spec verification skipped.']
       }
     }
 
-    const recheck = verifySpecHeuristics(nextSpec)
+    const recheck = verifySpecHeuristics(nextSpec, prompt)
 
     res.json({
       ok: recheck.issues.length === 0,
@@ -121,15 +128,20 @@ async function augmentSpecWithSizing(spec) {
   }
 
   const design = spec.design && typeof spec.design === 'object' ? { ...spec.design } : { style_source: 'auto' }
-  const sizeNote = `Target compact content area ≈ ${cal.content_width}×${cal.content_height}px; avoid excess whitespace.`
+  const sizeNote = `Target content area ≈ ${cal.content_width}×${cal.content_height}px.`
 
-  design.ux_notes = design.ux_notes ? `${design.ux_notes} ${sizeNote}` : sizeNote
+  if (!String(design.ux_notes || '').includes(`${cal.content_width}`)) {
+    design.ux_notes = design.ux_notes ? `${design.ux_notes} ${sizeNote}` : sizeNote
+  }
 
   return { ...spec, design }
 }
 
-async function runSpecModelVerify(spec, issues) {
+async function runSpecModelVerify(spec, issues, sourcePrompt = '') {
   const provider = getDefaultInterpreterProvider()
+  const promptNote = sourcePrompt
+    ? `\nORIGINAL USER REQUEST:\n${sourcePrompt}\n`
+    : ''
 
   const result = await callModel({
     role: 'verifier-spec',
@@ -141,12 +153,12 @@ async function runSpecModelVerify(spec, issues) {
       { role: 'system', content: VERIFIER_SPEC_PROMPT },
       {
         role: 'user',
-        content: `ISSUES:\n${issues.map((i) => `- ${i}`).join('\n')}\n\nSPEC:\n${JSON.stringify(spec, null, 2)}`,
+        content: `ISSUES:\n${issues.map((i) => `- ${i}`).join('\n')}${promptNote}\n\nSPEC:\n${JSON.stringify(spec, null, 2)}`,
       },
     ],
   })
 
-  return enrichSpecDesign(parseSpec(result, 'Verifier'))
+  return parseSpec(result, 'Verifier')
 }
 
 async function runPublishModelVerify(spec, html, measured, issues) {

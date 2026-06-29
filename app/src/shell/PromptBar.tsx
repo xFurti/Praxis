@@ -142,15 +142,12 @@ export function PromptBar({
             <ImageIcon />
             Attach screenshot
           </label>
-          <span className="transition-opacity duration-200">
+          <span className="text-right transition-opacity duration-200">
             {multimodal
               ? 'Image input enabled for interpreter'
-              : 'Keys and models stay on the server.'}
+              : 'Praxis writes the app for you — keys and models stay on the server.'}
           </span>
         </div>
-        <p className="mt-2 text-center text-xs text-praxis-muted/80">
-          Praxis writes the app for you — keys and models stay on the server.
-        </p>
       </div>
     </div>
   )

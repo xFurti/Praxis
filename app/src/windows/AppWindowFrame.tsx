@@ -1,12 +1,16 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { AppWindow, WindowBounds } from '../data/types'
 import { useInteraction } from './interactionContext'
 import { WindowRefineBar } from './WindowRefineBar'
+
+const MIN_DRAG_Y = 0
+const CORNER_GRAB = 18
 
 type AppWindowFrameProps = {
   win: AppWindow
   onFocus: (id: string) => void
   onMinimize: (id: string) => void
+  onToggleFullscreen: (id: string) => void
   onClose: (id: string) => void
   onRefine?: (id: string, changeRequest: string) => void
   onBoundsChange: (id: string, bounds: WindowBounds) => void
@@ -17,6 +21,7 @@ export function AppWindowFrame({
   win,
   onFocus,
   onMinimize,
+  onToggleFullscreen,
   onClose,
   onRefine,
   onBoundsChange,
@@ -31,13 +36,18 @@ export function AppWindowFrame({
     bounds: win.bounds,
   })
 
-  const move = (e: ReactPointerEvent) => {
+  const move = (clientX: number, clientY: number) => {
     if (!dragging.current) return
-    e.preventDefault()
     const { x, y, bounds } = start.current
-    const dx = e.clientX - x
-    const dy = e.clientY - y
-    onBoundsChange(win.id, { ...bounds, x: bounds.x + dx, y: bounds.y + dy })
+    const dx = clientX - x
+    const dy = clientY - y
+    const maxX = Math.max(0, window.innerWidth - bounds.width)
+    const maxY = Math.max(MIN_DRAG_Y, window.innerHeight - bounds.height)
+    onBoundsChange(win.id, {
+      ...bounds,
+      x: Math.min(Math.max(0, bounds.x + dx), maxX),
+      y: Math.min(Math.max(MIN_DRAG_Y, bounds.y + dy), maxY),
+    })
   }
 
   const end = () => {
@@ -47,13 +57,39 @@ export function AppWindowFrame({
   }
 
   const beginDrag = (e: ReactPointerEvent) => {
+    if (win.fullscreen) return
     e.stopPropagation()
+    e.preventDefault()
     onFocus(win.id)
     dragging.current = true
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     start.current = { x: e.clientX, y: e.clientY, bounds: { ...win.bounds } }
     interaction.begin()
+
+    const onMove = (ev: PointerEvent) => move(ev.clientX, ev.clientY)
+    const onEnd = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onEnd)
+      window.removeEventListener('pointercancel', onEnd)
+      end()
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onEnd)
+    window.addEventListener('pointercancel', onEnd)
   }
+
+  useEffect(() => {
+    if (!win.fullscreen) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onToggleFullscreen(win.id)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [win.fullscreen, win.id, onToggleFullscreen])
 
   if (win.minimized) return null
 
@@ -63,26 +99,31 @@ export function AppWindowFrame({
     win.status === 'verifying' ||
     win.status === 'fixing'
   const canRefine = win.status === 'ready' && Boolean(win.spec) && Boolean(onRefine)
+  const canFullscreen = win.status === 'ready' || win.status === 'error'
 
   const handleRefineSubmit = (changeRequest: string) => {
     onRefine?.(win.id, changeRequest)
     setRefineOpen(false)
   }
 
+  const cornerGrab = (position: string) =>
+    `absolute z-20 cursor-grab touch-none active:cursor-grabbing ${position}`
+
   return (
     <div
       className={`praxis-card absolute flex flex-col animate-window-spawn ${
+        win.fullscreen ? 'rounded-none shadow-2xl ring-1 ring-praxis-cyan/25' : ''
+      } ${
         isCreating ? 'ring-1 ring-praxis-cyan/35 shadow-glow animate-drag-glow' : ''
       }`}
       style={{ left: win.bounds.x, top: win.bounds.y, width: win.bounds.width, height: win.bounds.height, zIndex: win.zIndex }}
       onPointerDown={() => onFocus(win.id)}
     >
       <div
-        className="flex h-9 shrink-0 cursor-grab items-center justify-between border-b border-praxis-edge/70 px-3 active:cursor-grabbing"
+        className={`flex h-9 shrink-0 items-center justify-between border-b border-praxis-edge/70 px-3 ${
+          win.fullscreen ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+        }`}
         onPointerDown={beginDrag}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerCancel={end}
       >
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-praxis-text">{win.title}</span>
@@ -107,6 +148,26 @@ export function AppWindowFrame({
               title="Edit interface"
             >
               <EditIcon />
+            </button>
+          )}
+          {canFullscreen && (
+            <button
+              type="button"
+              className={`grid h-4 w-4 place-items-center rounded-full bg-praxis-surface2 transition ${
+                win.fullscreen
+                  ? 'text-praxis-cyan shadow-glow'
+                  : 'text-praxis-muted hover:text-praxis-cyan'
+              }`}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                onFocus(win.id)
+                onToggleFullscreen(win.id)
+              }}
+              aria-label={win.fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              aria-pressed={win.fullscreen}
+              title={win.fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
+            >
+              <FullscreenIcon expanded={win.fullscreen} />
             </button>
           )}
           <button
@@ -135,10 +196,61 @@ export function AppWindowFrame({
         onSubmit={handleRefineSubmit}
       />
 
-      <div className="relative flex-1 overflow-hidden rounded-b-xl bg-praxis-navy2/60">
+      <div
+        className={`relative flex-1 bg-praxis-navy2/60 ${
+          win.fullscreen ? 'overflow-auto rounded-none' : 'overflow-hidden rounded-b-xl'
+        }`}
+      >
         {children}
       </div>
+
+      {!win.fullscreen &&
+        (
+          [
+            { className: cornerGrab('left-0 top-0'), label: 'Drag window from top-left' },
+            { className: cornerGrab('right-0 top-0'), label: 'Drag window from top-right' },
+            { className: cornerGrab('left-0 bottom-0'), label: 'Drag window from bottom-left' },
+            { className: cornerGrab('right-0 bottom-0'), label: 'Drag window from bottom-right' },
+          ] as const
+        ).map(({ className, label }) => (
+          <div
+            key={label}
+            className={className}
+            style={{ width: CORNER_GRAB, height: CORNER_GRAB }}
+            onPointerDown={beginDrag}
+            aria-label={label}
+            title="Drag window"
+          />
+        ))}
     </div>
+  )
+}
+
+function FullscreenIcon({ expanded }: { expanded: boolean }) {
+  if (expanded) {
+    return (
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M9 9H5V5M15 5h4v4M19 15v4h-4M5 15v4h4"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    )
+  }
+
+  return (
+    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 

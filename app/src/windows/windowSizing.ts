@@ -2,6 +2,7 @@ import type { AppSpec, WindowBounds } from '../data/types'
 import { deriveCategoryFromSpec, getLearnedSizeForCategory } from '../runtime/learningMemory'
 
 export const TITLE_BAR_HEIGHT = 36
+export const TOP_BAR_HEIGHT = 48
 const VIEWPORT_MARGIN = 24
 const CONTENT_PADDING = 16
 const MIN_WINDOW_WIDTH = 300
@@ -59,8 +60,11 @@ export function defaultContentSizeForSpec(spec: AppSpec): { width: number; heigh
 
   const text = `${spec.app_name} ${spec.description} ${spec.logic} ${spec.components.join(' ')}`.toLowerCase()
 
-  if (text.includes('calculator') || text.includes('calc')) {
+  if (/\bcalculator\b/.test(text)) {
     return { width: 340, height: 500 }
+  }
+  if (/\b(game|gaming|simulator|sim)\b/.test(text)) {
+    return { width: 560, height: 480 }
   }
   if (text.includes('spreadsheet') || text.includes('sheet') || text.includes('csv') || text.includes('table')) {
     return { width: 680, height: 520 }
@@ -88,4 +92,13 @@ export function defaultContentSizeForSpec(spec: AppSpec): { width: number; heigh
 export function defaultWindowBoundsForSpec(spec: AppSpec, current: WindowBounds): WindowBounds {
   const size = defaultContentSizeForSpec(spec)
   return fitWindowToContent(size.width, size.height, current)
+}
+
+export function desktopFullscreenBounds(): WindowBounds {
+  return {
+    x: 0,
+    y: 0,
+    width: window.innerWidth,
+    height: Math.max(MIN_WINDOW_HEIGHT, window.innerHeight - TOP_BAR_HEIGHT),
+  }
 }

@@ -52,7 +52,7 @@ export function AgentOverlay({ activeWindow }: AgentOverlayProps) {
             label={
               activeWindow.status === 'fixing'
                 ? 'Patching UI…'
-                : 'Polishing layout…'
+                : 'Fitting window…'
             }
           />
         </div>

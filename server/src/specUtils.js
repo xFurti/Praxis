@@ -39,13 +39,18 @@ function isCurrentSpecShape(spec) {
   return (
     spec &&
     typeof spec === 'object' &&
-    typeof spec.app_name === 'string' &&
-    typeof spec.description === 'string' &&
-    typeof spec.logic === 'string' &&
+    hasNonemptyString(spec.app_name) &&
+    hasNonemptyString(spec.description) &&
+    hasNonemptyString(spec.logic) &&
     Array.isArray(spec.components) &&
+    spec.components.length > 0 &&
     spec.components.every((item) => typeof item === 'string') &&
     ['small', 'medium', 'large'].includes(spec.window_size)
   )
+}
+
+function hasNonemptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 function isLegacySpecShape(spec) {

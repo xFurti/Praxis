@@ -63,26 +63,9 @@ export async function buildInterpreterLearningSection() {
   const store = await getLearningStore()
   const lines = []
 
-  const categories = ['calculator', 'todo', 'timer', 'spreadsheet', 'dashboard', 'form', 'general']
-  const sizeHints = []
-
-  for (const category of categories) {
-    const cal = getSizeCalibration(store, category)
-    if (cal && cal.sample_count >= 2) {
-      sizeHints.push(
-        `${category}: prefer window_size that fits ~${cal.content_width}×${cal.content_height}px content`,
-      )
-    }
-  }
-
-  if (sizeHints.length) {
-    lines.push('Learned window sizing from prior apps:')
-    lines.push(...sizeHints.map((h) => `- ${h}`))
-  }
-
-  const topLessons = store.ui_lessons.slice(0, 5)
+  const topLessons = store.ui_lessons.slice(0, 2)
   if (topLessons.length) {
-    lines.push('', 'Common user refinements to anticipate in specs:')
+    lines.push('Optional refinements users often request (only if relevant to this prompt):')
     for (const lesson of topLessons) {
       lines.push(`- ${lesson}`)
     }
@@ -92,7 +75,7 @@ export async function buildInterpreterLearningSection() {
     return ''
   }
 
-  return `\n\nLEARNING FROM PRIOR APPS:\n${lines.join('\n')}`
+  return `\n\n${lines.join('\n')}`
 }
 
 /**
@@ -115,10 +98,10 @@ function pickRelevantLessons(lessons, category, spec) {
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
 
-  const picked = scored.slice(0, 4).map((item) => item.lesson)
+  const picked = scored.filter((item) => item.score >= 2).slice(0, 2).map((item) => item.lesson)
   if (picked.length) {
     return picked
   }
 
-  return lessons.slice(0, 3)
+  return []
 }

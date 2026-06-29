@@ -2,6 +2,8 @@ import { buildThemeStyleBlock } from './themeCss.js'
 import { getThemeById, pickAutoTheme } from './themes.js'
 import { BUILDER_BASE_PROMPT, UX_SKILL_PROMPT } from './praxisPrompts.js'
 import { buildBuilderLearningSection } from './learningContext.js'
+import { harmonizeThemeVars, paletteIsComplete } from './colorHarmony.js'
+import { isCalculatorSpec } from './appCategory.js'
 
 const STYLE_SOURCES = new Set(['user', 'inferred', 'auto'])
 
@@ -12,7 +14,10 @@ const STYLE_SOURCES = new Set(['user', 'inferred', 'auto'])
 export function enrichSpecDesign(spec) {
   const design = normalizeDesign(spec.design)
 
-  if (design.style_source === 'user' || design.style_source === 'inferred') {
+  if (
+    (design.style_source === 'user' || design.style_source === 'inferred') &&
+    paletteIsComplete(design.palette)
+  ) {
     return {
       ...spec,
       design: {
@@ -22,6 +27,8 @@ export function enrichSpecDesign(spec) {
       },
     }
   }
+
+  const utilityTheme = isCalculatorSpec(spec) ? getThemeById('praxis-core') : null
 
   if (design.theme_id) {
     const theme = getThemeById(design.theme_id)
@@ -39,7 +46,7 @@ export function enrichSpecDesign(spec) {
     }
   }
 
-  const theme = pickAutoTheme()
+  const theme = utilityTheme || pickAutoTheme()
   return {
     ...spec,
     design: {
@@ -63,15 +70,27 @@ export async function buildBuilderSystemPrompt(spec, options = {}) {
   const { css, brief } = resolveThemeForBuild(design)
   const learning = await buildBuilderLearningSection(spec, options)
 
+  const uxFromSpec = design.ux_notes ? `SPEC UX NOTES:\n${design.ux_notes}` : ''
+
   const sections = [
     BUILDER_BASE_PROMPT,
     UX_SKILL_PROMPT,
     learning,
-    `VISUAL DIRECTION FOR THIS APP:\n${brief}`,
-    `DESIGN SYSTEM (paste this <style> block inside the document):\n${css}`,
+    uxFromSpec,
+    `VISUAL DIRECTION:\n${brief}`,
+    `DESIGN SYSTEM (embed this <style> in the document):\n${css}`,
   ].filter(Boolean)
 
   return sections.join('\n\n')
+}
+
+/**
+ * Theme CSS block for templated or manual builds.
+ * @param {Record<string, unknown>} spec
+ */
+export function getThemeCssForSpec(spec) {
+  const design = normalizeDesign(spec.design)
+  return resolveThemeForBuild(design).css
 }
 
 function resolveThemeForBuild(design) {
@@ -138,7 +157,7 @@ function buildCustomThemeCss(design) {
   }
 
   const extras = design.custom_css ? String(design.custom_css) : ''
-  return buildThemeStyleBlock(vars, extras)
+  return buildThemeStyleBlock(harmonizeThemeVars(vars), extras)
 }
 
 function normalizeDesign(design) {

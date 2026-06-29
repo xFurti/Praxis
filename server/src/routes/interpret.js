@@ -4,6 +4,7 @@ import { buildInterpreterLearningSection } from '../learningContext.js'
 import { enrichSpecDesign } from '../styleDirector.js'
 import { parseSpec } from '../specUtils.js'
 import { getDefaultInterpreterProvider } from '../providerConfig.js'
+import { attachSourcePrompt } from '../specPipeline.js'
 
 /** POST /api/interpret
  *  Body: { prompt: string, screenshot?: string }
@@ -26,7 +27,7 @@ export async function handleInterpret(req, res, next) {
       },
       {
         role: 'user',
-        content: prompt,
+        content: `USER REQUEST:\n${prompt}\n\nProduce the JSON app spec for exactly this request.`,
       },
     ]
 
@@ -38,7 +39,9 @@ export async function handleInterpret(req, res, next) {
       baseUrl: provider.baseUrl,
       messages,
     })
-    res.json({ spec: enrichSpecDesign(parseSpec(result)) })
+    res.json({
+      spec: enrichSpecDesign(attachSourcePrompt(parseSpec(result), prompt)),
+    })
   } catch (err) {
     next(err)
   }

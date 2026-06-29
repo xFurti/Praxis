@@ -8,7 +8,7 @@ type GenerationPlaceholderProps = {
 const STATUS_COPY: Partial<Record<GenerationStatus, { label: string; hint: string }>> = {
   interpreting: { label: 'Interpreting your idea', hint: 'Vision agent → app spec' },
   building: { label: 'Writing your app', hint: 'Streaming HTML & logic' },
-  verifying: { label: 'Fixer checking interface', hint: 'Quick layout pass before publish' },
+  verifying: { label: 'Fixer fitting the window', hint: 'Adjusting size to match your app' },
   fixing: { label: 'Repairing runtime', hint: 'Auto-fix in progress' },
 }
 
@@ -54,22 +54,33 @@ export function GenerationPlaceholder({ status }: GenerationPlaceholderProps) {
       </div>
 
       <div className="relative flex h-full flex-col items-center justify-center gap-5 px-6">
-        <div className="relative grid h-28 w-28 place-items-center">
-          <span className="absolute inset-0 rounded-full bg-tech-magic/10 blur-2xl animate-creation-glow" />
-          <img
-            src="/praxis-logo.png"
-            alt=""
-            className="absolute h-16 w-16 object-cover opacity-40 blur-[1px] animate-creation-glow"
-            draggable={false}
-          />
-          <Sigil className="relative h-24 w-24 animate-creation-sigil" />
-          <span className="absolute inset-0 animate-creation-orbit">
-            <span className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-praxis-cyan shadow-glow" />
-          </span>
-          <span className="absolute inset-0 animate-creation-orbit-reverse">
-            <span className="absolute bottom-0 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-praxis-violet shadow-glow-violet" />
-          </span>
-        </div>
+        {status === 'verifying' ? (
+          <div className="relative h-28 w-28">
+            <img
+              src="/fixer_repairing.png"
+              alt=""
+              className="h-full w-full object-contain drop-shadow-[0_0_22px_rgba(139,92,246,0.4)] animate-creation-glow"
+              draggable={false}
+            />
+          </div>
+        ) : (
+          <div className="relative grid h-28 w-28 place-items-center">
+            <span className="absolute inset-0 rounded-full bg-tech-magic/10 blur-2xl animate-creation-glow" />
+            <img
+              src="/praxis-logo.png"
+              alt=""
+              className="absolute h-16 w-16 object-cover opacity-40 blur-[1px] animate-creation-glow"
+              draggable={false}
+            />
+            <Sigil className="relative h-24 w-24 animate-creation-sigil" />
+            <span className="absolute inset-0 animate-creation-orbit">
+              <span className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-praxis-cyan shadow-glow" />
+            </span>
+            <span className="absolute inset-0 animate-creation-orbit-reverse">
+              <span className="absolute bottom-0 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-praxis-violet shadow-glow-violet" />
+            </span>
+          </div>
+        )}
 
         <div className="flex flex-col items-center gap-1 text-center">
           <p className="praxis-display text-sm font-medium text-praxis-text animate-creation-text">

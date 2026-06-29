@@ -231,6 +231,7 @@ export function Desktop() {
             win={w}
             onFocus={wm.focus}
             onMinimize={wm.minimize}
+            onToggleFullscreen={wm.toggleFullscreen}
             onClose={(id) => {
               handles.current.get(id)?.cancel()
               handles.current.delete(id)
