@@ -33,11 +33,11 @@ export function AppFrame({ win }: AppFrameProps) {
       : `${win.id}-streaming`
 
   return (
-    <div className={`absolute inset-0 ${win.fullscreen ? 'overflow-auto' : 'overflow-hidden'}`}>
+    <div className={`absolute inset-0 bg-praxis-navy2/50 ${win.fullscreen ? 'overflow-auto' : 'overflow-hidden'}`}>
       <iframe
         key={iframeKey}
         title={win.title}
-        className={`w-full border-0 bg-white ${win.fullscreen ? 'min-h-full' : 'h-full'}`}
+        className={`w-full border-0 bg-praxis-navy ${win.fullscreen ? 'min-h-full' : 'h-full'}`}
         srcDoc={win.html}
         sandbox="allow-scripts allow-forms allow-popups allow-modals"
         scrolling={win.fullscreen ? 'yes' : 'no'}

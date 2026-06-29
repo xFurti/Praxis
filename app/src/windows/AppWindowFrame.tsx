@@ -107,35 +107,40 @@ export function AppWindowFrame({
   }
 
   const cornerGrab = (position: string) =>
-    `absolute z-20 cursor-grab touch-none active:cursor-grabbing ${position}`
+    `absolute z-20 cursor-grab touch-none opacity-0 active:cursor-grabbing ${position}`
 
   return (
     <div
       className={`praxis-card absolute flex flex-col animate-window-spawn ${
-        win.fullscreen ? 'rounded-none shadow-2xl ring-1 ring-praxis-cyan/25' : ''
+        win.fullscreen ? 'rounded-none shadow-2xl ring-1 ring-praxis-cyan/20' : ''
       } ${
-        isCreating ? 'ring-1 ring-praxis-cyan/35 shadow-glow animate-drag-glow' : ''
+        isCreating ? 'ring-1 ring-praxis-cyan/30 shadow-active' : ''
       }`}
       style={{ left: win.bounds.x, top: win.bounds.y, width: win.bounds.width, height: win.bounds.height, zIndex: win.zIndex }}
       onPointerDown={() => onFocus(win.id)}
     >
       <div
-        className={`flex h-9 shrink-0 items-center justify-between border-b border-praxis-edge/70 px-3 ${
+        className={`flex h-9 shrink-0 items-center justify-between border-b border-praxis-hairline bg-praxis-navy2/30 px-3 ${
           win.fullscreen ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
         }`}
         onPointerDown={beginDrag}
       >
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-praxis-text">{win.title}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="truncate text-xs font-medium tracking-tight text-praxis-text">{win.title}</span>
+          {win.status === 'ready' && win.buildMetrics && (
+            <span className="hidden shrink-0 rounded-full border border-praxis-cyan/25 bg-praxis-cyan/10 px-1.5 py-0.5 font-mono text-[9px] font-medium text-praxis-cyan sm:inline">
+              {formatWindowBuildTime(win.buildMetrics.durationMs)}
+            </span>
+          )}
           <StatusDot status={win.status} />
         </div>
         <div className="flex items-center gap-1.5">
           {canRefine && (
             <button
               type="button"
-              className={`grid h-4 w-4 place-items-center rounded-full bg-praxis-surface2 transition ${
+              className={`grid h-5 w-5 place-items-center rounded-md border border-praxis-hairline bg-praxis-panel/60 transition ${
                 refineOpen
-                  ? 'text-praxis-cyan shadow-glow'
+                  ? 'text-praxis-cyan ring-1 ring-praxis-cyan/30'
                   : 'text-praxis-muted hover:text-praxis-cyan'
               }`}
               onPointerDown={(e) => e.stopPropagation()}
@@ -153,9 +158,9 @@ export function AppWindowFrame({
           {canFullscreen && (
             <button
               type="button"
-              className={`grid h-4 w-4 place-items-center rounded-full bg-praxis-surface2 transition ${
+              className={`grid h-5 w-5 place-items-center rounded-md border border-praxis-hairline bg-praxis-panel/60 transition ${
                 win.fullscreen
-                  ? 'text-praxis-cyan shadow-glow'
+                  ? 'text-praxis-cyan ring-1 ring-praxis-cyan/30'
                   : 'text-praxis-muted hover:text-praxis-cyan'
               }`}
               onPointerDown={(e) => e.stopPropagation()}
@@ -171,15 +176,15 @@ export function AppWindowFrame({
             </button>
           )}
           <button
-            className="grid h-4 w-4 place-items-center rounded-full bg-praxis-surface2 text-praxis-muted hover:text-praxis-cyan"
+            className="grid h-5 w-5 place-items-center rounded-md border border-praxis-hairline bg-praxis-panel/60 text-praxis-muted transition hover:text-praxis-cyan"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => onMinimize(win.id)}
             aria-label="Minimize"
           >
-            <span className="block h-px w-2 bg-current" />
+            <span className="block h-px w-2.5 bg-current" />
           </button>
           <button
-            className="grid h-4 w-4 place-items-center rounded-full bg-praxis-surface2 text-praxis-muted hover:text-red-400"
+            className="grid h-5 w-5 place-items-center rounded-md border border-praxis-hairline bg-praxis-panel/60 text-praxis-muted transition hover:text-red-400"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => onClose(win.id)}
             aria-label="Close"
@@ -197,9 +202,10 @@ export function AppWindowFrame({
       />
 
       <div
-        className={`relative flex-1 bg-praxis-navy2/60 ${
-          win.fullscreen ? 'overflow-auto rounded-none' : 'overflow-hidden rounded-b-xl'
+        className={`relative flex-1 overflow-hidden bg-praxis-navy2/50 ${
+          win.fullscreen ? 'rounded-none' : 'rounded-b-2xl'
         }`}
+        style={{ boxShadow: 'inset 0 2px 12px rgba(0,0,0,0.35)' }}
       >
         {children}
       </div>
@@ -286,4 +292,9 @@ function CloseIcon() {
       <path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   )
+}
+
+function formatWindowBuildTime(durationMs: number) {
+  const seconds = durationMs / 1000
+  return seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`
 }

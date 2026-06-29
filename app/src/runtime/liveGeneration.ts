@@ -4,6 +4,11 @@ import { withRuntimeMonitor } from './runtimeMonitor'
 import { defaultWindowBoundsForSpec, fitWindowToContent } from '../windows/windowSizing'
 import { measureHtmlContent } from './publishVerifier'
 import { settleWindowDimensions } from './windowDimensionSettle'
+import {
+  dispatchAgentPhase,
+  dispatchBuildComplete,
+  type BuildSummary,
+} from './generationEvents'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 const SLOW_BENCHMARK_MS = 12000
@@ -68,11 +73,24 @@ export function startLiveGeneration(options: LiveGenerationOptions): LiveGenHand
 
 async function run(options: LiveGenerationOptions, signal: AbortSignal) {
   const { win, prompt, screenshot, onUpdate, onStatus, onHtml, onTokensPerSec } = options
+  const generationStartedAt = Date.now()
+  const multimodal = Boolean(screenshot)
+  let firstHtmlAt: number | null = null
+  let latestFast = 0
+  let latestSlow: number | null = null
 
   try {
     notifyBuildStart()
     onStatus(win.id, 'interpreting')
+
+    if (screenshot) {
+      dispatchAgentPhase('vision', true)
+    }
+
+    dispatchAgentPhase('interpret', multimodal)
     let spec = validateSpec(await interpretPrompt(prompt, screenshot, signal))
+
+    dispatchAgentPhase('verify', multimodal)
     spec = await verifySpecBeforeBuild(spec, signal, prompt)
     window.__praxisLastSpec = spec
     window.dispatchEvent(new Event('praxis-spec-ready'))
@@ -86,11 +104,10 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
     })
 
     onStatus(win.id, 'building')
+    dispatchAgentPhase('build', multimodal)
     let html = ''
     let totalTokens = 0
     const buildStart = Date.now()
-    let latestFast = 0
-    let latestSlow: number | null = null
     let lastSizeUpdateAt = 0
 
     const slowBenchmark = runSlowBenchmark(spec, signal, (slowTokPerSec) => {
@@ -99,6 +116,9 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
     })
 
     for await (const chunk of buildStream(spec, signal, 'fast')) {
+      if (!firstHtmlAt && chunk.trim()) {
+        firstHtmlAt = Date.now()
+      }
       html += chunk
       totalTokens += estimateTokens(chunk)
       const elapsed = Math.max(1, Date.now() - buildStart)
@@ -114,10 +134,7 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
       }
     }
 
-    void slowBenchmark
-
-    const buildDuration = Math.max(1, Date.now() - buildStart)
-    const finalTokPerSec = Math.round((totalTokens / buildDuration) * 1000)
+    slowBenchmark.stop()
 
     html = stripHtmlFences(html)
     html = await ensureValidHtml(html, 'Generated HTML failed validation.', signal)
@@ -146,15 +163,34 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
       signal,
     })
     onStatus(win.id, 'ready')
+    dispatchAgentPhase('ready', multimodal)
 
-    onTokensPerSec?.(finalTokPerSec, latestSlow)
-    window.dispatchEvent(
-      new CustomEvent('praxis-build-complete', { detail: { windowId: win.id, refined: false } }),
-    )
+    const buildMetrics = createBuildMetrics({
+      generationStartedAt,
+      firstHtmlAt,
+      latestFast,
+      latestSlow,
+      multimodal,
+    })
+
+    onUpdate(win.id, { buildMetrics })
+    dispatchBuildComplete({ windowId: win.id, ...buildMetrics, refined: false })
   } catch (error) {
     if (signal.aborted) {
       return
     }
+
+    dispatchBuildComplete({
+      windowId: win.id,
+      ...createBuildMetrics({
+        generationStartedAt,
+        firstHtmlAt,
+        latestFast,
+        latestSlow,
+        multimodal,
+      }),
+      failed: true,
+    })
 
     onStatus(win.id, 'error')
     onUpdate(win.id, {
@@ -172,6 +208,10 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
 
 async function runRefine(options: RefineOptions, signal: AbortSignal) {
   const { win, changeRequest, onUpdate, onStatus, onHtml, onTokensPerSec } = options
+  const generationStartedAt = Date.now()
+  let firstHtmlAt: number | null = null
+  let latestFast = 0
+  let latestSlow: number | null = null
 
   const currentSpec = win.spec as AppSpec | undefined
   if (!currentSpec) {
@@ -185,12 +225,14 @@ async function runRefine(options: RefineOptions, signal: AbortSignal) {
     onStatus(win.id, 'interpreting')
     onHtml(win.id, '')
 
+    dispatchAgentPhase('interpret')
     const spec = validateSpec(await refineSpec(currentSpec, changeRequest, signal))
-      const verifiedSpec = await verifySpecBeforeBuild(
-        spec,
-        signal,
-        (spec as AppSpec & { _source_prompt?: string })._source_prompt || changeRequest,
-      )
+    dispatchAgentPhase('verify')
+    const verifiedSpec = await verifySpecBeforeBuild(
+      spec,
+      signal,
+      (spec as AppSpec & { _source_prompt?: string })._source_prompt || changeRequest,
+    )
     window.__praxisLastSpec = verifiedSpec
     window.dispatchEvent(new Event('praxis-spec-ready'))
 
@@ -203,11 +245,10 @@ async function runRefine(options: RefineOptions, signal: AbortSignal) {
     })
 
     onStatus(win.id, 'building')
+    dispatchAgentPhase('build')
     let html = ''
     let totalTokens = 0
     const buildStart = Date.now()
-    let latestFast = 0
-    let latestSlow: number | null = null
     let lastSizeUpdateAt = 0
 
     const slowBenchmark = runSlowBenchmark(verifiedSpec, signal, (slowTokPerSec) => {
@@ -216,6 +257,9 @@ async function runRefine(options: RefineOptions, signal: AbortSignal) {
     })
 
     for await (const chunk of buildStream(verifiedSpec, signal, 'fast')) {
+      if (!firstHtmlAt && chunk.trim()) {
+        firstHtmlAt = Date.now()
+      }
       html += chunk
       totalTokens += estimateTokens(chunk)
       const elapsed = Math.max(1, Date.now() - buildStart)
@@ -231,10 +275,7 @@ async function runRefine(options: RefineOptions, signal: AbortSignal) {
       }
     }
 
-    void slowBenchmark
-
-    const buildDuration = Math.max(1, Date.now() - buildStart)
-    const finalTokPerSec = Math.round((totalTokens / buildDuration) * 1000)
+    slowBenchmark.stop()
 
     html = stripHtmlFences(html)
     html = await ensureValidHtml(html, 'Refined HTML failed validation.', signal)
@@ -263,17 +304,35 @@ async function runRefine(options: RefineOptions, signal: AbortSignal) {
       signal,
     })
     onStatus(win.id, 'ready')
+    dispatchAgentPhase('ready')
 
-    onTokensPerSec?.(finalTokPerSec, latestSlow)
-    window.dispatchEvent(
-      new CustomEvent('praxis-build-complete', {
-        detail: { windowId: win.id, refined: true, refinement_note: changeRequest },
-      }),
-    )
+    const buildMetrics = createBuildMetrics({
+      generationStartedAt,
+      firstHtmlAt,
+      latestFast,
+      latestSlow,
+      multimodal: false,
+    })
+
+    onUpdate(win.id, { buildMetrics })
+    dispatchBuildComplete({ windowId: win.id, ...buildMetrics, refined: true })
   } catch (error) {
     if (signal.aborted) {
       return
     }
+
+    dispatchBuildComplete({
+      windowId: win.id,
+      ...createBuildMetrics({
+        generationStartedAt,
+        firstHtmlAt,
+        latestFast,
+        latestSlow,
+        multimodal: false,
+      }),
+      refined: true,
+      failed: true,
+    })
 
     onStatus(win.id, 'error')
     onUpdate(win.id, {
@@ -595,12 +654,14 @@ async function finalizeForPublish(options: {
   let nextBounds = bounds
 
   onStatus(win.id, 'verifying')
+  dispatchAgentPhase('verify')
 
   let measured = await measureHtmlContent(html).catch(() => null)
   const publish = await requestVerifyPublish(spec, html, measured, signal)
 
   if (publish.needs_fix && publish.fix_hint) {
     onStatus(win.id, 'fixing')
+    dispatchAgentPhase('fix')
     html = await requestFix(html, publish.fix_hint, signal)
     html = stripHtmlFences(html)
     const structuralError = validateGeneratedHtml(html)
@@ -683,6 +744,26 @@ function estimateTokens(text: string) {
 
 function notifyBuildStart() {
   window.dispatchEvent(new Event('praxis-build-start'))
+}
+
+function createBuildMetrics(options: {
+  generationStartedAt: number
+  firstHtmlAt: number | null
+  latestFast: number
+  latestSlow: number | null
+  multimodal: boolean
+}): Omit<BuildSummary, 'windowId' | 'failed' | 'refined'> {
+  const durationMs = Math.max(1, Date.now() - options.generationStartedAt)
+  return {
+    durationMs,
+    timeToFirstHtmlMs:
+      options.firstHtmlAt != null
+        ? Math.max(1, options.firstHtmlAt - options.generationStartedAt)
+        : null,
+    fastTokPerSec: options.latestFast,
+    slowTokPerSec: options.latestSlow,
+    multimodal: options.multimodal,
+  }
 }
 
 
@@ -775,7 +856,7 @@ async function runProviderPreview(
   }
 }
 
-async function runSlowBenchmark(
+function runSlowBenchmark(
   spec: AppSpec,
   parentSignal: AbortSignal,
   onSlowTokens: (tokPerSec: number) => void,
@@ -783,68 +864,86 @@ async function runSlowBenchmark(
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), SLOW_BENCHMARK_MS)
   const onParentAbort = () => controller.abort()
+  let mockInterval: number | null = null
 
   parentSignal.addEventListener('abort', onParentAbort)
 
+  const stop = () => {
+    controller.abort()
+    if (mockInterval != null) {
+      window.clearInterval(mockInterval)
+      mockInterval = null
+    }
+  }
+
   const startClientMock = () => {
     let rate = 24
-    const mock = window.setInterval(() => {
+    mockInterval = window.setInterval(() => {
       if (controller.signal.aborted) {
         return
       }
       rate += 4
       onSlowTokens(rate)
     }, 320)
-    controller.signal.addEventListener('abort', () => window.clearInterval(mock))
+    controller.signal.addEventListener('abort', () => {
+      if (mockInterval != null) {
+        window.clearInterval(mockInterval)
+        mockInterval = null
+      }
+    })
   }
 
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/speed-compare/live`, {
-      method: 'POST',
-      headers: {
-        Accept: 'text/event-stream',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ spec }),
-      signal: controller.signal,
-    })
+  void (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/speed-compare/live`, {
+        method: 'POST',
+        headers: {
+          Accept: 'text/event-stream',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ spec }),
+        signal: controller.signal,
+      })
 
-    if (!res.ok || !res.body) {
-      startClientMock()
-      return
-    }
+      if (!res.ok || !res.body) {
+        startClientMock()
+        return
+      }
 
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let gotSlow = false
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let gotSlow = false
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
 
-      buffer += decoder.decode(value, { stream: true })
-      const events = buffer.split('\n\n')
-      buffer = events.pop() ?? ''
+        buffer += decoder.decode(value, { stream: true })
+        const events = buffer.split('\n\n')
+        buffer = events.pop() ?? ''
 
-      for (const event of events) {
-        const parsed = parseSseEvent(event)
-        if (typeof parsed.tokenPerSec === 'number' && parsed.tokenPerSec > 0) {
-          gotSlow = true
-          onSlowTokens(parsed.tokenPerSec)
+        for (const event of events) {
+          const parsed = parseSseEvent(event)
+          if (typeof parsed.tokenPerSec === 'number' && parsed.tokenPerSec > 0) {
+            gotSlow = true
+            onSlowTokens(parsed.tokenPerSec)
+          }
         }
       }
-    }
 
-    if (!gotSlow) {
-      startClientMock()
+      if (!gotSlow) {
+        startClientMock()
+      }
+    } catch {
+      if (!controller.signal.aborted) {
+        startClientMock()
+      }
+    } finally {
+      window.clearTimeout(timeout)
+      parentSignal.removeEventListener('abort', onParentAbort)
     }
-  } catch {
-    if (!controller.signal.aborted) {
-      startClientMock()
-    }
-  } finally {
-    window.clearTimeout(timeout)
-    parentSignal.removeEventListener('abort', onParentAbort)
-  }
+  })()
+
+  return { stop }
 }

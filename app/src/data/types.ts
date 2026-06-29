@@ -20,6 +20,14 @@ export type FixEntry = {
   applied: boolean
 }
 
+export type BuildMetrics = {
+  durationMs: number
+  timeToFirstHtmlMs: number | null
+  fastTokPerSec: number
+  slowTokPerSec: number | null
+  multimodal: boolean
+}
+
 export type AppWindow = {
   id: string
   title: string
@@ -32,6 +40,7 @@ export type AppWindow = {
   html: string
   spec?: unknown
   errors: FixEntry[]
+  buildMetrics?: BuildMetrics
 }
 
 export type UserPromptRequest = {

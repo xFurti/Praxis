@@ -36,10 +36,10 @@ export function GenerationPlaceholder({ status }: GenerationPlaceholderProps) {
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-praxis-navy2/90">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(34,211,238,0.12),transparent_55%)] animate-creation-pulse" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_80%,rgba(139,92,246,0.1),transparent_50%)] animate-creation-pulse-reverse" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(34,211,238,0.10),transparent_55%)] animate-creation-pulse" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_80%,rgba(139,92,246,0.08),transparent_50%)] animate-creation-pulse-reverse" />
 
-      <div className="absolute inset-0 opacity-30">
+      <div className="absolute inset-0 opacity-25">
         {Array.from({ length: 12 }, (_, i) => (
           <span
             key={i}
@@ -83,7 +83,7 @@ export function GenerationPlaceholder({ status }: GenerationPlaceholderProps) {
         )}
 
         <div className="flex flex-col items-center gap-1 text-center">
-          <p className="praxis-display text-sm font-medium text-praxis-text animate-creation-text">
+          <p className="praxis-display text-sm font-medium text-praxis-text">
             {copy.label}
             <span className="inline-flex w-6 justify-start">
               <span className="animate-creation-dots">…</span>
@@ -94,20 +94,20 @@ export function GenerationPlaceholder({ status }: GenerationPlaceholderProps) {
           </p>
         </div>
 
-        <div className="h-1 w-48 overflow-hidden rounded-full bg-praxis-surface2/80 ring-1 ring-praxis-edge/50">
+        <div className="h-1 w-48 overflow-hidden rounded-full bg-praxis-surface2/70 ring-1 ring-praxis-edge/40">
           <div className="h-full w-2/5 rounded-full bg-tech-magic praxis-streaming" />
         </div>
 
         <p
           key={fragment}
-          className="font-mono text-[10px] text-praxis-cyan/50 animate-creation-code"
+          className="font-mono text-[10px] text-praxis-cyan/45 animate-creation-code"
           aria-hidden="true"
         >
           {fragment}
         </p>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-praxis-cyan/10 to-transparent animate-creation-scan" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-praxis-cyan/10 to-transparent animate-creation-scan" />
     </div>
   )
 }

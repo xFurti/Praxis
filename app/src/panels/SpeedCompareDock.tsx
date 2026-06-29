@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import { SpeedCompare } from './SpeedCompare'
 import type { ProviderEntry } from './SpeedCompare'
 
+import type { BuildSummary } from '../runtime/generationEvents'
+
 type SpeedCompareDockProps = {
   providers: ProviderEntry[]
   live?: boolean
+  summary?: BuildSummary | null
   canPreview?: boolean
   onProviderClick?: (providerId: 'fast' | 'slow', label: string) => void
 }
@@ -12,16 +15,19 @@ type SpeedCompareDockProps = {
 export function SpeedCompareDock({
   providers,
   live,
+  summary,
   canPreview,
   onProviderClick,
 }: SpeedCompareDockProps) {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    if (live) {
+    if (live || (summary && !summary.failed)) {
       setOpen(true)
+      return
     }
-  }, [live])
+    setOpen(false)
+  }, [live, summary])
 
   return (
     <div className="pointer-events-none absolute right-0 top-4 z-20 flex items-start">
@@ -33,15 +39,15 @@ export function SpeedCompareDock({
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className={`group relative flex w-11 shrink-0 flex-col items-center justify-center gap-2 rounded-l-xl border border-r-0 border-praxis-edge/80 bg-praxis-surface/95 py-4 shadow-window backdrop-blur-md transition hover:border-praxis-cyan/50 ${
-            live ? 'border-praxis-cyan/40' : ''
+          className={`group relative flex w-11 shrink-0 flex-col items-center justify-center gap-2 rounded-l-2xl border border-r-0 border-praxis-hairline bg-praxis-glass-strong/85 py-4 shadow-float backdrop-blur-xl transition hover:border-praxis-cyan/40 ${
+            live ? 'border-praxis-cyan/30' : ''
           }`}
           aria-expanded={open}
           aria-label={open ? 'Collapse Speed Compare' : 'Open Speed Compare'}
           title={open ? 'Hide Speed Compare' : 'Show Speed Compare'}
         >
           <span
-            className={`grid h-7 w-7 place-items-center rounded-lg bg-tech-magic/15 transition-transform duration-300 group-hover:scale-105 ${
+            className={`grid h-7 w-7 place-items-center rounded-lg bg-praxis-cyan/10 transition-transform duration-300 group-hover:scale-105 ${
               live ? 'animate-pulse-soft' : ''
             }`}
           >
@@ -49,18 +55,19 @@ export function SpeedCompareDock({
           </span>
           <ChevronIcon open={open} />
           {live && (
-            <span className="absolute right-1 top-2 h-2 w-2 rounded-full bg-praxis-cyan shadow-glow" />
+            <span className="absolute right-1 top-2 h-2 w-2 rounded-full bg-praxis-cyan" />
           )}
         </button>
 
         <div
-          className={`w-72 overflow-hidden border border-praxis-edge/80 bg-praxis-navy2/40 shadow-window backdrop-blur-md transition-all duration-300 ${
+          className={`w-72 overflow-hidden border border-praxis-hairline bg-praxis-glass-strong/80 shadow-float backdrop-blur-xl transition-all duration-300 ${
             open ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         >
           <SpeedCompare
             providers={providers}
             live={live}
+            summary={summary}
             canPreview={canPreview}
             onProviderClick={onProviderClick}
           />

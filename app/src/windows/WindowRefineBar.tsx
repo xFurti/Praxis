@@ -31,14 +31,14 @@ export function WindowRefineBar({ open, busy, onClose, onSubmit }: WindowRefineB
 
   return (
     <div
-      className="shrink-0 border-b border-praxis-edge/70 bg-praxis-surface2/90 px-3 py-2 backdrop-blur-md"
+      className="shrink-0 animate-fade-in border-b border-praxis-hairline bg-praxis-glass-strong/85 px-3 py-2 backdrop-blur-xl"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="flex items-center gap-2">
         <PencilIcon />
         <input
           ref={inputRef}
-          className="praxis-input min-w-0 flex-1 border-praxis-edge/60 py-1.5 text-xs"
+          className="praxis-input min-w-0 flex-1 border-praxis-edge/50 bg-praxis-navy2/60 py-1.5 text-xs"
           placeholder="Describe changes to this interface…"
           value={value}
           disabled={busy}

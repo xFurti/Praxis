@@ -12,18 +12,18 @@ export function Taskbar({ windows, onRestore, onClose }: TaskbarProps) {
   if (minimized.length === 0) return null
 
   return (
-    <div className="pointer-events-auto absolute top-0 left-1/2 z-50 -translate-x-1/2 pt-2">
-      <div className="flex items-center gap-2 rounded-2xl border border-praxis-edge/70 bg-praxis-navy2/90 px-3 py-2 backdrop-blur-md shadow-lg">
+    <div className="pointer-events-none absolute top-0 left-1/2 z-50 -translate-x-1/2 pt-2">
+      <div className="pointer-events-auto flex items-center gap-1.5 rounded-2xl border border-praxis-hairline bg-praxis-glass-strong/85 px-2.5 py-2 shadow-float backdrop-blur-xl">
         {minimized.map((w) => (
           <div
             key={w.id}
-            className="group flex items-center gap-2 rounded-xl border border-praxis-edge/50 bg-praxis-surface2/60 px-3 py-1.5 hover:border-praxis-cyan/40 hover:bg-praxis-surface2 transition-colors cursor-pointer"
+            className="group flex cursor-pointer items-center gap-2 rounded-xl border border-praxis-hairline/60 bg-praxis-panel/50 px-3 py-1.5 transition-colors hover:border-praxis-cyan/40 hover:bg-praxis-panel/80"
             onClick={() => onRestore(w.id)}
           >
             <StatusDot status={w.status} />
-            <span className="max-w-[120px] truncate text-xs text-praxis-text">{w.title}</span>
+            <span className="max-w-[120px] truncate text-xs text-praxis-text/90">{w.title}</span>
             <button
-              className="ml-1 grid h-3.5 w-3.5 place-items-center rounded-full text-praxis-muted opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"
+              className="ml-0.5 grid h-3.5 w-3.5 place-items-center rounded-full text-praxis-muted opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400"
               onClick={(e) => {
                 e.stopPropagation()
                 onClose(w.id)

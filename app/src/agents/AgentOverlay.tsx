@@ -39,7 +39,7 @@ export function AgentOverlay({ activeWindow }: AgentOverlayProps) {
 
       {showBuilder && (
         <>
-          <div className="absolute left-1/2 bottom-[168px] h-12 w-40 -translate-x-1/2 rounded-full border border-praxis-cyan/20 bg-gradient-to-r from-transparent via-praxis-cyan/30 to-transparent blur-sm" />
+          <div className="absolute left-1/2 bottom-[168px] h-8 w-32 -translate-x-1/2 rounded-full bg-gradient-to-r from-transparent via-praxis-cyan/20 to-transparent blur-md" />
           <div className="absolute praxis-agent praxis-agent-bob" style={builderStyle}>
             <BuilderSprite />
           </div>
@@ -65,15 +65,19 @@ function InterpreterSprite({ talking }: { talking: boolean }) {
   const src = talking ? '/interpreter_talking.png' : '/interpreter_idle.png'
   return (
     <div className="relative h-24 w-24">
+      <span
+        className="absolute bottom-1 left-1/2 h-3 w-16 -translate-x-1/2 rounded-full bg-black/40 blur-md"
+        aria-hidden="true"
+      />
       {talking && (
-        <div className="absolute -right-8 -top-5 rounded-2xl border border-praxis-cyan/60 bg-praxis-navy2/95 px-2 py-1 text-[10px] text-praxis-cyan shadow-glow">
-          {'spec -> builder'}
+        <div className="absolute -right-8 -top-5 rounded-2xl border border-praxis-hairline bg-praxis-glass-strong/90 px-2 py-1 font-mono text-[10px] text-praxis-cyan shadow-float backdrop-blur-xl">
+          spec → builder
         </div>
       )}
       <img
         src={src}
         alt="Interpreter"
-        className="h-full w-full object-contain drop-shadow-[0_0_20px_rgba(139,92,246,0.45)]"
+        className="relative h-full w-full object-contain drop-shadow-[0_0_20px_rgba(139,92,246,0.45)]"
       />
     </div>
   )
@@ -82,10 +86,14 @@ function InterpreterSprite({ talking }: { talking: boolean }) {
 function BuilderSprite() {
   return (
     <div className="relative h-28 w-28">
+      <span
+        className="absolute bottom-1 left-1/2 h-3 w-20 -translate-x-1/2 rounded-full bg-black/40 blur-md"
+        aria-hidden="true"
+      />
       <img
         src="/builder_working.png"
         alt="Builder"
-        className="h-full w-full object-contain drop-shadow-[0_0_20px_rgba(34,211,238,0.35)]"
+        className="relative h-full w-full object-contain drop-shadow-[0_0_20px_rgba(34,211,238,0.35)]"
       />
     </div>
   )
@@ -94,15 +102,19 @@ function BuilderSprite() {
 function FixerSprite({ label }: { label?: string }) {
   return (
     <div className="relative h-28 w-28">
+      <span
+        className="absolute bottom-1 left-1/2 h-3 w-20 -translate-x-1/2 rounded-full bg-black/40 blur-md"
+        aria-hidden="true"
+      />
       {label && (
-        <div className="absolute -left-2 -top-6 whitespace-nowrap rounded-2xl border border-praxis-violet/60 bg-praxis-navy2/95 px-2.5 py-1 text-[10px] font-medium text-praxis-violet shadow-glow-violet">
+        <div className="absolute -left-2 -top-6 whitespace-nowrap rounded-2xl border border-praxis-hairline bg-praxis-glass-strong/90 px-2.5 py-1 text-[10px] font-medium text-praxis-violet shadow-float backdrop-blur-xl">
           {label}
         </div>
       )}
       <img
         src="/fixer_repairing.png"
         alt="Fixer"
-        className="h-full w-full object-contain drop-shadow-[0_0_22px_rgba(139,92,246,0.4)]"
+        className="relative h-full w-full object-contain drop-shadow-[0_0_22px_rgba(139,92,246,0.4)]"
       />
     </div>
   )
