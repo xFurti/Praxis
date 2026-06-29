@@ -1,0 +1,206 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+export { deriveCategory } from './appCategory.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const STORE_PATH = path.join(__dirname, '../data/gemma-learning.json')
+const MAX_RECORDS = 120
+const MAX_UI_LESSONS = 24
+
+/** @typedef {{
+ *   id: string
+ *   at: string
+ *   provider: string
+ *   app_name: string
+ *   category: string
+ *   window_size: string
+ *   theme_id?: string
+ *   content_width?: number
+ *   content_height?: number
+ *   window_width?: number
+ *   window_height?: number
+ *   component_count: number
+ *   refined: boolean
+ *   refinement_note?: string
+ *   success: boolean
+ * }} LearningRecord */
+
+/** @typedef {{ version: number, records: LearningRecord[], ui_lessons: string[] }} LearningStore */
+
+/** @type {LearningStore | null} */
+let cache = null
+
+async function loadStore() {
+  if (cache) {
+    return cache
+  }
+
+  try {
+    const raw = await fs.readFile(STORE_PATH, 'utf8')
+    cache = migrateStore(JSON.parse(raw))
+    return cache
+  } catch {
+    cache = { version: 1, records: [], ui_lessons: [] }
+    return cache
+  }
+}
+
+async function saveStore(store) {
+  await fs.mkdir(path.dirname(STORE_PATH), { recursive: true })
+  await fs.writeFile(STORE_PATH, JSON.stringify(store, null, 2), 'utf8')
+  cache = store
+}
+
+/** @param {LearningStore} store */
+function migrateStore(store) {
+  if (!store || typeof store !== 'object') {
+    return { version: 1, records: [], ui_lessons: [] }
+  }
+
+  const lessons = Array.isArray(store.ui_lessons) ? store.ui_lessons : []
+  const migrated = []
+  const seen = new Set()
+
+  for (const raw of lessons) {
+    const text = String(raw || '').trim()
+    if (!text) continue
+
+    let lesson = text
+    const legacy = text.match(/^After "[^"]+" \(([^)]+)\): users asked — (.+)$/i)
+    if (legacy) {
+      lesson = `Quality fix (${legacy[1]}): ${legacy[2].trim()}`
+    }
+
+    const key = sanitizeStoredLesson(lesson)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    migrated.push(lesson)
+  }
+
+  return {
+    version: store.version || 1,
+    records: Array.isArray(store.records) ? store.records : [],
+    ui_lessons: migrated,
+  }
+}
+
+function median(values) {
+  if (!values.length) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2)
+}
+
+/**
+ * @param {LearningStore} store
+ * @param {string} category
+ */
+export function getSizeCalibration(store, category) {
+  const records = store.records.filter(
+    (r) => r.success && r.provider === 'fast' && r.content_width && r.content_height,
+  )
+
+  const forCategory = records.filter((r) => r.category === category)
+  const pool = forCategory.length >= 2 ? forCategory : records
+
+  const widths = pool.map((r) => r.content_width).filter((n) => typeof n === 'number')
+  const heights = pool.map((r) => r.content_height).filter((n) => typeof n === 'number')
+
+  const width = median(widths)
+  const height = median(heights)
+
+  if (!width || !height) {
+    return null
+  }
+
+  return {
+    category,
+    content_width: width,
+    content_height: height,
+    sample_count: pool.length,
+    source: forCategory.length >= 2 ? 'category' : 'global',
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} entry
+ */
+export async function recordLearning(entry) {
+  const store = await loadStore()
+
+  /** @type {LearningRecord} */
+  const record = {
+    id: `lr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    at: new Date().toISOString(),
+    provider: entry.provider === 'slow' ? 'slow' : 'fast',
+    app_name: String(entry.app_name || 'App').slice(0, 80),
+    category: String(entry.category || 'general'),
+    window_size: String(entry.window_size || 'medium'),
+    theme_id: typeof entry.theme_id === 'string' ? entry.theme_id : undefined,
+    content_width: typeof entry.content_width === 'number' ? Math.round(entry.content_width) : undefined,
+    content_height: typeof entry.content_height === 'number' ? Math.round(entry.content_height) : undefined,
+    window_width: typeof entry.window_width === 'number' ? Math.round(entry.window_width) : undefined,
+    window_height: typeof entry.window_height === 'number' ? Math.round(entry.window_height) : undefined,
+    component_count: typeof entry.component_count === 'number' ? entry.component_count : 0,
+    refined: Boolean(entry.refined),
+    refinement_note:
+      typeof entry.refinement_note === 'string' ? entry.refinement_note.slice(0, 240) : undefined,
+    success: entry.success !== false,
+  }
+
+  store.records.unshift(record)
+  if (store.records.length > MAX_RECORDS) {
+    store.records = store.records.slice(0, MAX_RECORDS)
+  }
+
+  if (record.refined && record.refinement_note) {
+    const note = record.refinement_note.trim().slice(0, 240)
+    const lesson = `Quality fix (${record.category}): ${note}`
+    if (note && !store.ui_lessons.some((existing) => sanitizeStoredLesson(existing) === note)) {
+      store.ui_lessons.unshift(lesson)
+    }
+  }
+
+  if (store.ui_lessons.length > MAX_UI_LESSONS) {
+    store.ui_lessons = store.ui_lessons.slice(0, MAX_UI_LESSONS)
+  }
+
+  await saveStore(store)
+  return record
+}
+
+export async function getLearningStore() {
+  return loadStore()
+}
+
+export async function getLearnedSizeHints() {
+  const store = await loadStore()
+  const categories = [...new Set(store.records.map((r) => r.category))]
+  const hints = {}
+
+  for (const category of categories) {
+    const cal = getSizeCalibration(store, category)
+    if (cal) {
+      hints[category] = { width: cal.content_width, height: cal.content_height, samples: cal.sample_count }
+    }
+  }
+
+  const global = getSizeCalibration(store, 'general')
+  if (global) {
+    hints.general = { width: global.content_width, height: global.content_height, samples: global.sample_count }
+  }
+
+  return hints
+}
+
+/** Normalize lesson text for deduplication. */
+function sanitizeStoredLesson(lesson) {
+  const text = String(lesson || '').trim()
+  const legacy = text.match(/^After "[^"]+" \([^)]+\): users asked — (.+)$/i)
+  if (legacy) return legacy[1].trim()
+  const quality = text.match(/^Quality (?:lesson|fix) \([^)]+\): (.+)$/i)
+  if (quality) return quality[1].trim()
+  return text
+}

@@ -1,5 +1,14 @@
+import { useState } from 'react'
 import { Shell } from './shell/Shell'
+import { BootScreen } from './shell/BootScreen'
 
 export default function App() {
-  return <Shell onPrompt={(p) => console.log('prompt:', p)} />
+  const [booted, setBooted] = useState(false)
+
+  return (
+    <>
+      {!booted && <BootScreen onReady={() => setBooted(true)} />}
+      {booted && <Shell onPrompt={(p) => console.log('prompt:', p)} />}
+    </>
+  )
 }

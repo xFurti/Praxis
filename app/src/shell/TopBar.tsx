@@ -2,18 +2,18 @@ import { Logo } from './Logo'
 
 export function TopBar() {
   return (
-    <header className="relative z-30 flex h-12 items-center justify-between border-b border-praxis-edge/70 bg-praxis-navy2/70 px-4 backdrop-blur-md">
+    <header className="praxis-glass-bar relative z-30 flex h-12 items-center justify-between px-4">
       <Logo />
-      <div className="hidden items-center gap-2 sm:flex">
-        <span className="praxis-chip">
+      <div className="pointer-events-none absolute inset-x-0 flex justify-center">
+        <span className="praxis-chip border-praxis-cyan/20 text-praxis-muted">
           <span className="h-1.5 w-1.5 rounded-full bg-praxis-cyan animate-pulse-soft" />
-          generative os
+          Powered by <span className="font-medium text-praxis-cyan">Cerebras</span>
         </span>
       </div>
-      <div className="flex items-center gap-1.5">
-        <span className="h-2.5 w-2.5 rounded-full bg-praxis-edge" />
-        <span className="h-2.5 w-2.5 rounded-full bg-praxis-edge" />
-        <span className="h-2.5 w-2.5 rounded-full bg-praxis-edge" />
+      <div className="flex items-center gap-1.5" aria-hidden="true">
+        <span className="h-2 w-2 rounded-full bg-praxis-edge/70" />
+        <span className="h-2 w-2 rounded-full bg-praxis-edge/70" />
+        <span className="h-2 w-2 rounded-full bg-praxis-edge/70" />
       </div>
     </header>
   )

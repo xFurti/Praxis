@@ -1,6 +1,17 @@
 /**
- * @typedef {{ role: 'interpreter' | 'builder' | 'fixer', messages: Array<{role: string, content: string}>, stream?: boolean }} CallModelOpts
+ * @typedef {{ role: 'interpreter' | 'builder' | 'fixer' | 'refiner' | 'verifier-spec' | 'verifier-publish', messages: Array<{role: string, content: unknown}>, stream?: boolean, provider?: string, model?: string, apiKey?: string, baseUrl?: string }} CallModelOpts
  */
+
+const CEREBRAS_BASE_URL = 'https://api.cerebras.ai'
+
+export class ProviderError extends Error {
+  constructor(publicMessage, options = {}) {
+    super(options.logMessage || publicMessage)
+    this.name = 'ProviderError'
+    this.publicMessage = publicMessage
+    this.statusCode = options.statusCode || 502
+  }
+}
 
 /**
  * callModel({ role, messages, stream })
@@ -13,42 +24,143 @@
  * @returns {Promise<string> | AsyncIterable<string>}
  */
 export async function callModel(opts) {
-  const provider = process.env.PROVIDER || 'mock'
-  const model = process.env.MODEL || 'mock-model'
-  const apiKey = process.env.MODEL_API_KEY || ''
-  const baseUrl = process.env.MODEL_BASE_URL || ''
+  const provider = resolveProvider(opts)
+  const model = resolveModel(provider, opts)
+  const apiKey = resolveApiKey(provider, opts)
+  const baseUrl = resolveBaseUrl(provider, opts)
 
   // No real credentials → mock
   if (provider === 'mock' || !apiKey) {
-    return mockResponse(opts.role)
+    if (opts.stream) {
+      return mockStreamResponse(opts.role)
+    }
+
+    return normalizeRoleOutput(opts.role, mockResponse(opts.role))
   }
 
-  // Real OpenAI-compatible call
-  const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: opts.messages,
-      stream: !!opts.stream,
-      max_tokens: 4096,
-    }),
-  })
+  let res
+
+  try {
+    res = await fetch(buildChatCompletionsUrl(baseUrl), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: opts.messages,
+        stream: !!opts.stream,
+        max_tokens: 32768,
+        temperature: resolveTemperature(opts.role),
+      }),
+      signal: AbortSignal.timeout(60000),
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new ProviderError('The model provider timed out.', {
+        logMessage: `callModel ${provider} timeout after 60s`,
+        statusCode: 504,
+      })
+    }
+    throw new ProviderError('Unable to reach the model provider.', {
+      logMessage: `callModel ${provider} network error: ${error instanceof Error ? error.message : String(error)}`,
+    })
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`callModel ${provider} error ${res.status}: ${body.slice(0, 200)}`)
+    throw new ProviderError('The model provider returned an error.', {
+      logMessage: `callModel ${provider} error ${res.status}: ${body.slice(0, 400)}`,
+      statusCode: 502,
+    })
   }
 
   if (opts.stream) {
+    if (!res.body) {
+      throw new ProviderError('The model provider did not return a stream body.', {
+        logMessage: `callModel ${provider} stream missing response body`,
+      })
+    }
+
     return streamChunks(res.body)
   }
 
   const data = await res.json()
-  return data.choices?.[0]?.message?.content ?? ''
+  return normalizeRoleOutput(opts.role, extractMessageContent(data))
+}
+
+function resolveProvider(opts = {}) {
+  const explicit = (opts.provider || process.env.PROVIDER || '').trim().toLowerCase()
+  if (explicit) {
+    return explicit
+  }
+
+  if (process.env.CEREBRAS_API_KEY) {
+    return 'cerebras'
+  }
+
+  if (process.env.MODEL_API_KEY) {
+    return 'openai-compatible'
+  }
+
+  return 'mock'
+}
+
+function resolveModel(provider, opts = {}) {
+  if (opts.model) {
+    return opts.model
+  }
+
+  if (provider === 'cerebras') {
+    return process.env.CEREBRAS_MODEL || process.env.MODEL || 'gemma-4-31b'
+  }
+
+  return process.env.MODEL || 'mock-model'
+}
+
+function resolveApiKey(provider, opts = {}) {
+  if (opts.apiKey) {
+    return opts.apiKey
+  }
+
+  if (provider === 'cerebras') {
+    return process.env.CEREBRAS_API_KEY || process.env.MODEL_API_KEY || ''
+  }
+
+  return process.env.MODEL_API_KEY || ''
+}
+
+function resolveTemperature(role) {
+  if (role === 'interpreter' || role === 'builder' || role === 'refiner') {
+    return 0.88
+  }
+  if (role === 'verifier-spec' || role === 'verifier-publish' || role === 'fixer') {
+    return 0.35
+  }
+  return 0.7
+}
+
+function resolveBaseUrl(provider, opts = {}) {
+  if (opts.baseUrl) {
+    return opts.baseUrl
+  }
+
+  if (provider === 'cerebras') {
+    return process.env.CEREBRAS_BASE_URL || process.env.MODEL_BASE_URL || CEREBRAS_BASE_URL
+  }
+
+  return process.env.MODEL_BASE_URL || ''
+}
+
+function buildChatCompletionsUrl(baseUrl) {
+  const normalized = (baseUrl || '').replace(/\/+$/, '')
+
+  if (/\/v\d+$/i.test(normalized)) {
+    return `${normalized}/chat/completions`
+  }
+
+  return `${normalized}/v1/chat/completions`
 }
 
 /**
@@ -57,14 +169,43 @@ export async function callModel(opts) {
 function mockResponse(role) {
   const mocks = {
     interpreter: JSON.stringify({
-      name: 'Demo App',
-      purpose: 'A generated demo app',
-      components: [{ name: 'Hero', kind: 'section', description: 'Welcome banner' }],
+      app_name: 'Demo App',
+      description: 'A generated demo app',
+      components: ['display:hello', 'button:Say hi'],
+      logic: 'Show a small welcome app with one display and one button.',
+      window_size: 'medium',
+      design: { style_source: 'auto' },
     }),
+    refiner: JSON.stringify({
+      app_name: 'Demo App',
+      description: 'A refined demo app',
+      components: ['display:hello', 'button:Say hi', 'button:Reset'],
+      logic: 'Show a welcome app with display and buttons including reset.',
+      window_size: 'medium',
+      design: { style_source: 'auto', theme_id: 'praxis-core' },
+    }),
+    'verifier-spec': JSON.stringify({
+      app_name: 'Demo App',
+      description: 'A generated demo app',
+      components: ['display:hello', 'button:Say hi'],
+      logic: 'Show a small welcome app with one display and one button.',
+      window_size: 'small',
+      design: { style_source: 'auto', ux_notes: 'Compact centered layout.' },
+    }),
+    'verifier-publish': JSON.stringify({ ok: true, issues: [] }),
     builder: `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Inter,system-ui,sans-serif;background:#070b1a;color:#e6ebff;padding:24px}.card{border:1px solid #243056;background:rgba(18,26,51,.8);border-radius:12px;padding:16px}</style></head><body><div class="card"><h1 class="praxis-display">Demo App</h1><p>Generated by Praxis (mock builder)</p></div></body></html>`,
     fixer: `<!doctype html><html><head><meta charset="utf-8"></head><body><p>Fixed by mock fixer</p></body></html>`,
   }
   return mocks[role] ?? ''
+}
+
+async function* mockStreamResponse(role) {
+  const text = normalizeRoleOutput(role, mockResponse(role))
+  const step = Math.max(32, Math.floor(text.length / 8))
+
+  for (let i = 0; i < text.length; i += step) {
+    yield text.slice(i, i + step)
+  }
 }
 
 /**
@@ -87,8 +228,10 @@ async function* streamChunks(body) {
         if (!trimmed || trimmed === '[DONE]') continue
         try {
           const parsed = JSON.parse(trimmed)
-          const delta = parsed.choices?.[0]?.delta?.content
-          if (delta) yield delta
+          const delta = extractContentText(parsed.choices?.[0]?.delta?.content)
+          if (delta) {
+            yield delta
+          }
         } catch {
           // non-JSON line, skip
         }
@@ -97,4 +240,69 @@ async function* streamChunks(body) {
   } finally {
     reader.releaseLock()
   }
+}
+
+function extractMessageContent(data) {
+  return extractContentText(data?.choices?.[0]?.message?.content)
+}
+
+function extractContentText(content) {
+  if (typeof content === 'string') {
+    return content
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part
+        if (part && typeof part.text === 'string') return part.text
+        return ''
+      })
+      .join('')
+  }
+
+  return ''
+}
+
+export function normalizeRoleOutput(role, raw) {
+  const text = String(raw || '').trim()
+
+  if (role === 'builder' || role === 'fixer') {
+    return normalizeHtml(text)
+  }
+
+  if (role === 'interpreter' || role === 'refiner' || role === 'verifier-spec') {
+    return normalizeJson(text)
+  }
+
+  if (role === 'verifier-publish') {
+    return normalizeJson(text)
+  }
+
+  return text
+}
+
+function normalizeHtml(text) {
+  const lower = text.toLowerCase()
+  const doctypeIndex = lower.indexOf('<!doctype html>')
+  const htmlIndex = lower.indexOf('<html')
+  const startIndex = doctypeIndex >= 0 ? doctypeIndex : htmlIndex
+  const endIndex = lower.lastIndexOf('</html>')
+
+  if (startIndex >= 0 && endIndex >= 0 && endIndex > startIndex) {
+    return text.slice(startIndex, endIndex + '</html>'.length).trim()
+  }
+
+  return text
+}
+
+function normalizeJson(text) {
+  const startIndex = text.indexOf('{')
+  const endIndex = text.lastIndexOf('}')
+
+  if (startIndex >= 0 && endIndex > startIndex) {
+    return text.slice(startIndex, endIndex + 1).trim()
+  }
+
+  return text
 }

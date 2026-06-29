@@ -1,4 +1,11 @@
-import { callModel } from '../callModel.js'
+import { callModel, ProviderError } from '../callModel.js'
+import { INTERPRETER_SYSTEM_PROMPT } from '../praxisPrompts.js'
+import { buildInterpreterLearningSection } from '../learningContext.js'
+import { enrichSpecDesign } from '../styleDirector.js'
+import { parseSpec } from '../specUtils.js'
+import { getDefaultInterpreterProvider } from '../providerConfig.js'
+import { attachSourcePrompt } from '../specPipeline.js'
+import { INTERPRETER_VARIETY_HINT } from '../visualVariety.js'
 
 /** POST /api/interpret
  *  Body: { prompt: string, screenshot?: string }
@@ -7,30 +14,36 @@ import { callModel } from '../callModel.js'
 export async function handleInterpret(req, res, next) {
   try {
     const { prompt, screenshot } = req.body
-    if (!prompt) {
-      return res.status(400).json({ error: 'prompt is required' })
+    if (!prompt && !screenshot) {
+      return res.status(400).json({ error: 'prompt or screenshot is required' })
     }
+
+    const provider = getDefaultInterpreterProvider()
+    const learning = await buildInterpreterLearningSection()
 
     const messages = [
       {
         role: 'system',
-        content:
-          'You are INTERPRETER. Convert the user prompt into a JSON app specification with fields: name, purpose, components[]. Return only valid JSON.',
+        content: INTERPRETER_SYSTEM_PROMPT + '\n\n' + INTERPRETER_VARIETY_HINT + learning,
       },
-      { role: 'user', content: screenshot ? `[image attached] ${prompt}` : prompt },
+      {
+        role: 'user',
+        content: `USER REQUEST:\n${prompt}\n\nProduce the JSON app spec for exactly this request. Give it a unique visual identity — do not reuse a generic default look.`,
+      },
     ]
 
-    const result = await callModel({ role: 'interpreter', messages })
-    res.json({ spec: parseSpec(result) })
+    const result = await callModel({
+      role: 'interpreter',
+      provider: provider.provider,
+      model: provider.model,
+      apiKey: provider.apiKey,
+      baseUrl: provider.baseUrl,
+      messages,
+    })
+    res.json({
+      spec: enrichSpecDesign(attachSourcePrompt(parseSpec(result), prompt)),
+    })
   } catch (err) {
     next(err)
-  }
-}
-
-function parseSpec(raw) {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return { name: 'Unknown', purpose: raw.slice(0, 120), components: [] }
   }
 }

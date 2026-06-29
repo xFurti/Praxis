@@ -1,27 +1,36 @@
 import { callModel } from '../callModel.js'
+import { buildBuilderSystemPrompt, enrichSpecDesign } from '../styleDirector.js'
+import { getProviderConfigs } from '../providerConfig.js'
+import { buildBuilderUserMessage } from '../specPipeline.js'
 
 /** POST /api/build
- *  Body: { spec: object }
+ *  Body: { spec: object, source_prompt?: string }
  *  If Accept: text/event-stream → stream HTML chunks via SSE
  *  Otherwise → return full HTML
  */
 export async function handleBuild(req, res, next) {
   try {
-    const { spec } = req.body
-    if (!spec) {
+    const { spec: rawSpec, provider: providerId, source_prompt: sourcePrompt } = req.body
+    if (!rawSpec) {
       return res.status(400).json({ error: 'spec is required' })
     }
+
+    const spec = enrichSpecDesign(rawSpec)
+    const streaming = req.headers.accept?.includes('text/event-stream')
+    const userPrompt = String(sourcePrompt || spec._source_prompt || '')
 
     const messages = [
       {
         role: 'system',
-        content:
-          'You are BUILDER. Generate a self-contained HTML document for the given app spec. Use Praxis design-system classes.',
+        content: await buildBuilderSystemPrompt(spec, { providerId }),
       },
-      { role: 'user', content: JSON.stringify(spec) },
+      {
+        role: 'user',
+        content: buildBuilderUserMessage(spec, userPrompt),
+      },
     ]
 
-    const streaming = req.headers.accept?.includes('text/event-stream')
+    const providerOpts = resolveProviderOpts(providerId)
 
     if (streaming) {
       res.setHeader('Content-Type', 'text/event-stream')
@@ -29,7 +38,7 @@ export async function handleBuild(req, res, next) {
       res.setHeader('Connection', 'keep-alive')
 
       try {
-        const chunks = await callModel({ role: 'builder', messages, stream: true })
+        const chunks = await callModel({ role: 'builder', messages, stream: true, ...providerOpts })
         if (typeof chunks[Symbol.asyncIterator] === 'function') {
           for await (const chunk of chunks) {
             res.write(`data: ${JSON.stringify({ chunk })}\n\n`)
@@ -40,14 +49,33 @@ export async function handleBuild(req, res, next) {
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
         res.end()
       } catch (err) {
-        res.write(`event: error\ndata: ${JSON.stringify({ error: 'Build failed' })}\n\n`)
+        const message = err?.publicMessage || err?.message || 'Build failed'
+        res.write(`data: ${JSON.stringify({ error: message })}\n\n`)
         res.end()
       }
     } else {
-      const html = await callModel({ role: 'builder', messages })
+      const html = await callModel({ role: 'builder', messages, ...providerOpts })
       res.json({ html })
     }
   } catch (err) {
     next(err)
+  }
+}
+
+function resolveProviderOpts(providerId) {
+  if (providerId !== 'fast' && providerId !== 'slow') {
+    return {}
+  }
+
+  const cfg = getProviderConfigs().find((item) => item.id === providerId)
+  if (!cfg) {
+    return {}
+  }
+
+  return {
+    provider: cfg.provider,
+    model: cfg.model,
+    apiKey: cfg.apiKey,
+    baseUrl: cfg.baseUrl,
   }
 }

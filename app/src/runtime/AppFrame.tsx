@@ -1,5 +1,7 @@
 import type { AppWindow } from '../data/types'
 import { useInteraction } from '../windows/interactionContext'
+import { GenerationPlaceholder } from './GenerationPlaceholder'
+import { StreamingOverlay } from './StreamingOverlay'
 
 type AppFrameProps = {
   win: AppWindow
@@ -17,34 +19,37 @@ export function AppFrame({ win }: AppFrameProps) {
   const { interacting } = useInteraction()
   const building =
     win.status === 'building' || win.status === 'interpreting' || win.status === 'fixing'
+  const verifying = win.status === 'verifying'
+  const showPlaceholder =
+    (building && !win.html) || (verifying && !win.html) || win.status === 'interpreting'
 
-  if (building && !win.html) {
-    return <GenerationPlaceholder />
+  if (showPlaceholder) {
+    return <GenerationPlaceholder status={verifying ? 'verifying' : win.status} />
   }
 
+  const iframeKey =
+    win.status === 'ready' || win.status === 'error' || verifying
+      ? `${win.id}-final-${win.html.length}`
+      : `${win.id}-streaming`
+
   return (
-    <div className="absolute inset-0">
+    <div className={`absolute inset-0 bg-praxis-navy2/50 ${win.fullscreen ? 'overflow-auto' : 'overflow-hidden'}`}>
       <iframe
+        key={iframeKey}
         title={win.title}
-        className="h-full w-full border-0 bg-white"
+        className={`w-full border-0 bg-praxis-navy ${win.fullscreen ? 'min-h-full' : 'h-full'}`}
         srcDoc={win.html}
         sandbox="allow-scripts allow-forms allow-popups allow-modals"
+        scrolling={win.fullscreen ? 'yes' : 'no'}
         style={{ pointerEvents: interacting ? 'none' : 'auto' }}
       />
-      {building && (
-        <div className="pointer-events-none absolute inset-0 praxis-streaming" aria-hidden="true" />
+      {building && win.html && <StreamingOverlay status={win.status} />}
+      {verifying && (
+        <div
+          className="pointer-events-none absolute inset-0 bg-praxis-navy/10 ring-1 ring-inset ring-praxis-violet/20"
+          aria-hidden="true"
+        />
       )}
-    </div>
-  )
-}
-
-function GenerationPlaceholder() {
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-praxis-muted">
-      <div className="h-2 w-2/3 overflow-hidden rounded-full bg-praxis-surface2">
-        <div className="h-full w-1/3 praxis-streaming" />
-      </div>
-      <p className="text-xs">Writing your app…</p>
     </div>
   )
 }

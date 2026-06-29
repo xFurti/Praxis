@@ -17,6 +17,8 @@ out/
 .vite/
 *.tsbuildinfo
 
+server/data/
+
 # Logs / temp
 *.log
 tmp/
@@ -29,3 +31,17 @@ tmp/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local agent / IDE workflow (not part of the shipped product)
+.agent/
+.cursor/
+.pi/
+.opencode/
+
+# Early prompt drafts (canonical prompts live in server/src/praxisPrompts.js)
+PraxisSystemPrompt.md
+
+# Internal planning / workflow (local only)
+AGENTS.md
+DESIGN_SYSTEM.md
+openspec/
