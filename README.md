@@ -227,4 +227,5 @@ Commit prefixes: `[prebuild]` for scaffolding, `[core]` for hackathon features.
 
 <p align="center">
   <sub>Built for the Cerebras Gemma Hackathon · Track 1: Multiverse Agents</sub>
+  <sub>Create by https://github.com/xFurti and https://github.com/PiEnneGi </sub>
 </p>
