@@ -27,7 +27,7 @@ export function AgentOverlay({ activeWindow }: AgentOverlayProps) {
 
   const showInterpreter = activeWindow.status === 'interpreting' || activeWindow.status === 'building'
   const showBuilder = activeWindow.status === 'building'
-  const showFixer = activeWindow.status === 'fixing'
+  const showFixer = activeWindow.status === 'fixing' || activeWindow.status === 'verifying'
 
   return (
     <div className="pointer-events-none absolute inset-0 z-40 overflow-hidden">
@@ -48,7 +48,13 @@ export function AgentOverlay({ activeWindow }: AgentOverlayProps) {
 
       {showFixer && (
         <div className="absolute praxis-agent praxis-agent-bob" style={fixerStyle}>
-          <FixerSprite />
+          <FixerSprite
+            label={
+              activeWindow.status === 'fixing'
+                ? 'Patching UI…'
+                : 'Polishing layout…'
+            }
+          />
         </div>
       )}
     </div>
@@ -85,9 +91,14 @@ function BuilderSprite() {
   )
 }
 
-function FixerSprite() {
+function FixerSprite({ label }: { label?: string }) {
   return (
     <div className="relative h-28 w-28">
+      {label && (
+        <div className="absolute -left-2 -top-6 whitespace-nowrap rounded-2xl border border-praxis-violet/60 bg-praxis-navy2/95 px-2.5 py-1 text-[10px] font-medium text-praxis-violet shadow-glow-violet">
+          {label}
+        </div>
+      )}
       <img
         src="/fixer_repairing.png"
         alt="Fixer"

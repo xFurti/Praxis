@@ -1,6 +1,17 @@
-import type { AppSpec, AppWindow, GenerationStatus } from '../data/types'
+import type { AppSpec, AppWindow, GenerationStatus, WindowBounds } from '../data/types'
+import { applyBuildSizeUpdate } from './contentSizeEstimator'
+import { withRuntimeMonitor } from './runtimeMonitor'
+import { defaultWindowBoundsForSpec, fitWindowToContent } from '../windows/windowSizing'
+import { measureHtmlContent } from './publishVerifier'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+const SLOW_BENCHMARK_MS = 12000
+
+declare global {
+  interface Window {
+    __praxisLastSpec?: AppSpec
+  }
+}
 
 type LiveGenerationOptions = {
   win: AppWindow
@@ -25,6 +36,24 @@ type FixOptions = {
   onHtml: (id: string, html: string) => void
 }
 
+type RefineOptions = {
+  win: AppWindow
+  changeRequest: string
+  onUpdate: (id: string, patch: Partial<AppWindow>) => void
+  onStatus: (id: string, status: GenerationStatus) => void
+  onHtml: (id: string, html: string) => void
+  onTokensPerSec?: (fast: number, slow: number | null) => void
+}
+
+export function startRefineGeneration(options: RefineOptions): LiveGenHandle {
+  const controller = new AbortController()
+  void runRefine(options, controller.signal)
+  return {
+    windowId: options.win.id,
+    cancel: () => controller.abort(),
+  }
+}
+
 export function startLiveGeneration(options: LiveGenerationOptions): LiveGenHandle {
   const controller = new AbortController()
 
@@ -40,55 +69,72 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
   const { win, prompt, screenshot, onUpdate, onStatus, onHtml, onTokensPerSec } = options
 
   try {
+    notifyBuildStart()
     onStatus(win.id, 'interpreting')
-    const spec = validateSpec(await interpretPrompt(prompt, screenshot, signal))
+    let spec = validateSpec(await interpretPrompt(prompt, screenshot, signal))
+    spec = await verifySpecBeforeBuild(spec, signal)
+    window.__praxisLastSpec = spec
+    window.dispatchEvent(new Event('praxis-spec-ready'))
+
+    let currentBounds: WindowBounds = defaultWindowBoundsForSpec(spec, win.bounds)
+
     onUpdate(win.id, {
       spec,
       title: spec.app_name || win.title,
-      bounds: {
-        ...win.bounds,
-        ...boundsForWindowSize(spec.window_size),
-      },
+      bounds: currentBounds,
     })
 
     onStatus(win.id, 'building')
     let html = ''
     let totalTokens = 0
     const buildStart = Date.now()
+    let latestFast = 0
+    let latestSlow: number | null = null
+    let lastSizeUpdateAt = 0
 
-    for await (const chunk of buildStream(spec, signal)) {
+    const slowBenchmark = runSlowBenchmark(spec, signal, (slowTokPerSec) => {
+      latestSlow = slowTokPerSec
+      onTokensPerSec?.(latestFast, slowTokPerSec)
+    })
+
+    for await (const chunk of buildStream(spec, signal, 'fast')) {
       html += chunk
       totalTokens += estimateTokens(chunk)
       const elapsed = Math.max(1, Date.now() - buildStart)
-      const currentTokPerSec = Math.round((totalTokens / elapsed) * 1000)
-      onTokensPerSec?.(currentTokPerSec, null)
+      latestFast = Math.round((totalTokens / elapsed) * 1000)
+      onTokensPerSec?.(latestFast, latestSlow)
       onHtml(win.id, html)
+
+      const now = Date.now()
+      if (now - lastSizeUpdateAt > 400) {
+        lastSizeUpdateAt = now
+        currentBounds = applyBuildSizeUpdate(spec, html, currentBounds)
+        onUpdate(win.id, { bounds: currentBounds })
+      }
     }
+
+    void slowBenchmark
 
     const buildDuration = Math.max(1, Date.now() - buildStart)
     const finalTokPerSec = Math.round((totalTokens / buildDuration) * 1000)
 
-    // Strip markdown fences the model may have wrapped around the HTML
     html = stripHtmlFences(html)
     html = await ensureValidHtml(html, 'Generated HTML failed validation.', signal)
-    html = withRuntimeMonitor(html, win.id)
+    html = await finalizeForPublish({
+      win,
+      spec,
+      html,
+      onUpdate,
+      onStatus,
+      signal,
+    })
     onHtml(win.id, html)
-
-    // Measure the actual content size and resize the window to fit it tightly
-    const measured = await measureContentSize(win.id, signal)
-    if (measured) {
-      onUpdate(win.id, {
-        bounds: {
-          ...win.bounds,
-          width: measured.width,
-          height: measured.height,
-        },
-      })
-    }
-
     onStatus(win.id, 'ready')
-    onTokensPerSec?.(finalTokPerSec, null)
-    window.dispatchEvent(new Event('praxis-build-complete'))
+
+    onTokensPerSec?.(finalTokPerSec, latestSlow)
+    window.dispatchEvent(
+      new CustomEvent('praxis-build-complete', { detail: { windowId: win.id, refined: false } }),
+    )
   } catch (error) {
     if (signal.aborted) {
       return
@@ -105,6 +151,107 @@ async function run(options: LiveGenerationOptions, signal: AbortSignal) {
       ],
     })
     onHtml(win.id, buildErrorDocument(error instanceof Error ? error.message : 'Generation failed'))
+  }
+}
+
+async function runRefine(options: RefineOptions, signal: AbortSignal) {
+  const { win, changeRequest, onUpdate, onStatus, onHtml, onTokensPerSec } = options
+
+  const currentSpec = win.spec as AppSpec | undefined
+  if (!currentSpec) {
+    onStatus(win.id, 'error')
+    onHtml(win.id, buildErrorDocument('This window has no app spec to refine.'))
+    return
+  }
+
+  try {
+    notifyBuildStart()
+    onStatus(win.id, 'interpreting')
+    onHtml(win.id, '')
+
+    const spec = validateSpec(await refineSpec(currentSpec, changeRequest, signal))
+    const verifiedSpec = await verifySpecBeforeBuild(spec, signal)
+    window.__praxisLastSpec = verifiedSpec
+    window.dispatchEvent(new Event('praxis-spec-ready'))
+
+    let currentBounds: WindowBounds = defaultWindowBoundsForSpec(verifiedSpec, win.bounds)
+
+    onUpdate(win.id, {
+      spec: verifiedSpec,
+      title: verifiedSpec.app_name || win.title,
+      bounds: currentBounds,
+    })
+
+    onStatus(win.id, 'building')
+    let html = ''
+    let totalTokens = 0
+    const buildStart = Date.now()
+    let latestFast = 0
+    let latestSlow: number | null = null
+    let lastSizeUpdateAt = 0
+
+    const slowBenchmark = runSlowBenchmark(verifiedSpec, signal, (slowTokPerSec) => {
+      latestSlow = slowTokPerSec
+      onTokensPerSec?.(latestFast, slowTokPerSec)
+    })
+
+    for await (const chunk of buildStream(verifiedSpec, signal, 'fast')) {
+      html += chunk
+      totalTokens += estimateTokens(chunk)
+      const elapsed = Math.max(1, Date.now() - buildStart)
+      latestFast = Math.round((totalTokens / elapsed) * 1000)
+      onTokensPerSec?.(latestFast, latestSlow)
+      onHtml(win.id, html)
+
+      const now = Date.now()
+      if (now - lastSizeUpdateAt > 400) {
+        lastSizeUpdateAt = now
+        currentBounds = applyBuildSizeUpdate(verifiedSpec, html, currentBounds)
+        onUpdate(win.id, { bounds: currentBounds })
+      }
+    }
+
+    void slowBenchmark
+
+    const buildDuration = Math.max(1, Date.now() - buildStart)
+    const finalTokPerSec = Math.round((totalTokens / buildDuration) * 1000)
+
+    html = stripHtmlFences(html)
+    html = await ensureValidHtml(html, 'Refined HTML failed validation.', signal)
+    html = await finalizeForPublish({
+      win,
+      spec: verifiedSpec,
+      html,
+      onUpdate,
+      onStatus,
+      signal,
+    })
+    onHtml(win.id, html)
+    onStatus(win.id, 'ready')
+
+    onTokensPerSec?.(finalTokPerSec, latestSlow)
+    window.dispatchEvent(
+      new CustomEvent('praxis-build-complete', {
+        detail: { windowId: win.id, refined: true, refinement_note: changeRequest },
+      }),
+    )
+  } catch (error) {
+    if (signal.aborted) {
+      return
+    }
+
+    onStatus(win.id, 'error')
+    onUpdate(win.id, {
+      errors: [
+        ...win.errors,
+        {
+          at: new Date().toISOString(),
+          error: error instanceof Error ? error.message : 'Refine failed',
+          applied: false,
+        },
+      ],
+    })
+    onHtml(win.id, buildErrorDocument(error instanceof Error ? error.message : 'Refine failed'))
   }
 }
 
@@ -133,10 +280,10 @@ async function runFix(options: FixOptions, signal: AbortSignal) {
     fixed = await ensureValidHtml(fixed, error, signal)
     fixed = withRuntimeMonitor(fixed, win.id)
 
-    onHtml(win.id, fixed)
     onUpdate(win.id, {
       errors: [...win.errors, { ...errorEntry, applied: true }],
     })
+    onHtml(win.id, fixed)
     onStatus(win.id, 'ready')
   } catch (fixError) {
     if (signal.aborted) {
@@ -195,6 +342,26 @@ async function interpretPrompt(prompt: string, screenshot: string | undefined, s
   return data.spec
 }
 
+async function refineSpec(spec: AppSpec, changeRequest: string, signal: AbortSignal): Promise<AppSpec> {
+  const res = await fetch(`${API_BASE_URL}/api/refine`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ spec, changeRequest }),
+    signal,
+  })
+
+  if (!res.ok) {
+    throw new Error(await readApiError(res, 'Refine request failed.'))
+  }
+
+  const data = (await res.json()) as { spec?: AppSpec }
+  if (!data.spec) {
+    throw new Error('Refiner returned no app spec.')
+  }
+
+  return data.spec
+}
+
 async function requestFix(html: string, error: string, signal: AbortSignal) {
   const res = await fetch(`${API_BASE_URL}/api/fix`, {
     method: 'POST',
@@ -215,14 +382,14 @@ async function requestFix(html: string, error: string, signal: AbortSignal) {
   return data.html
 }
 
-async function* buildStream(spec: AppSpec, signal: AbortSignal) {
+async function* buildStream(spec: AppSpec, signal: AbortSignal, provider?: 'fast' | 'slow') {
   const res = await fetch(`${API_BASE_URL}/api/build`, {
     method: 'POST',
     headers: {
       Accept: 'text/event-stream',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ spec }),
+    body: JSON.stringify({ spec, provider }),
     signal,
   })
 
@@ -275,7 +442,12 @@ function parseSseEvent(event: string) {
   }
 
   try {
-    return JSON.parse(payload) as { chunk?: string; done?: boolean; error?: string }
+    return JSON.parse(payload) as {
+      chunk?: string
+      done?: boolean
+      error?: string
+      tokenPerSec?: number
+    }
   } catch {
     return {}
   }
@@ -314,6 +486,94 @@ function validateSpec(raw: AppSpec) {
   return raw
 }
 
+async function verifySpecBeforeBuild(spec: AppSpec, signal: AbortSignal): Promise<AppSpec> {
+  const res = await fetch(`${API_BASE_URL}/api/verify/spec`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ spec }),
+    signal,
+  })
+
+  if (!res.ok) {
+    return spec
+  }
+
+  const data = (await res.json()) as { spec?: AppSpec }
+  return data.spec ? validateSpec(data.spec) : spec
+}
+
+async function requestVerifyPublish(
+  spec: AppSpec,
+  html: string,
+  measured: { width: number; height: number } | null,
+  signal: AbortSignal,
+) {
+  const res = await fetch(`${API_BASE_URL}/api/verify/publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      spec,
+      html,
+      content_width: measured?.width,
+      content_height: measured?.height,
+      fast: true,
+    }),
+    signal,
+  })
+
+  if (!res.ok) {
+    return { ok: true, needs_fix: false, issues: [] as string[], fix_hint: '' }
+  }
+
+  return (await res.json()) as {
+    ok: boolean
+    needs_fix?: boolean
+    issues?: string[]
+    fix_hint?: string
+  }
+}
+
+async function finalizeForPublish(options: {
+  win: AppWindow
+  spec: AppSpec
+  html: string
+  onUpdate: (id: string, patch: Partial<AppWindow>) => void
+  onStatus: (id: string, status: GenerationStatus) => void
+  signal: AbortSignal
+}) {
+  const { win, spec, html: inputHtml, onUpdate, onStatus, signal } = options
+  let html = withRuntimeMonitor(inputHtml, win.id)
+
+  onStatus(win.id, 'verifying')
+
+  let measured = await measureHtmlContent(html).catch(() => null)
+  const publish = await requestVerifyPublish(spec, html, measured, signal)
+
+  if (publish.needs_fix && publish.fix_hint) {
+    onStatus(win.id, 'fixing')
+    html = await requestFix(html, publish.fix_hint, signal)
+    html = stripHtmlFences(html)
+    const structuralError = validateGeneratedHtml(html)
+    if (structuralError) {
+      throw new Error(`Publish fix still invalid: ${structuralError}`)
+    }
+    html = withRuntimeMonitor(html, win.id)
+    measured = await measureHtmlContent(html).catch(() => measured)
+  }
+
+  if (measured) {
+    onUpdate(win.id, {
+      bounds: fitWindowToContent(measured.width, measured.height, win.bounds),
+    })
+  }
+
+  if (!publish.ok && publish.issues?.length) {
+    console.warn('[praxis] publish verification notes:', publish.issues)
+  }
+
+  return html
+}
+
 async function ensureValidHtml(html: string, errorContext: string, signal: AbortSignal) {
   const validationError = validateGeneratedHtml(html)
   if (!validationError) {
@@ -348,21 +608,6 @@ function validateGeneratedHtml(html: string) {
   return null
 }
 
-function withRuntimeMonitor(html: string, windowId: string) {
-  // Error tracking + one-time size measurement on load
-  const monitor = `<script>(function(){if(window.__praxisRuntimeMonitorInstalled)return;window.__praxisRuntimeMonitorInstalled=true;function post(p){try{parent.postMessage(Object.assign({windowId:${JSON.stringify(windowId)}},p),'*')}catch(e){}}function send(e){post({type:'praxis-runtime-error',error:String(e||'Unknown runtime error')})}function measure(){try{var b=document.body,d=document.documentElement,bs=b?window.getComputedStyle(b):null,p=function(v){var n=parseFloat(v||'0');return isFinite(n)?n:0},pL=p(bs?bs.paddingLeft:'0'),pR=p(bs?bs.paddingRight:'0'),pT=p(bs?bs.paddingTop:'0'),pB=p(bs?bs.paddingBottom:'0'),sw=Math.max(b?b.scrollWidth:0,d?d.scrollWidth:0,b?b.offsetWidth:0),sh=Math.max(b?b.scrollHeight:0,d?d.scrollHeight:0,b?b.offsetHeight:0);post({type:'praxis-measured-size',width:Math.ceil(sw+pL+pR+16),height:Math.ceil(sh+pT+pB+16)})}catch(e){}}window.addEventListener('error',function(e){send(e.message||(e.error&&e.error.message)||'Runtime error')});window.addEventListener('unhandledrejection',function(e){var r=e.reason;send(r&&r.message?r.message:String(r||'Unhandled promise rejection'))});if(document.readyState==='complete'){measure()}else{window.addEventListener('load',function(){setTimeout(measure,200)})}setTimeout(measure,500);setTimeout(measure,1000);})();</script>`
-
-  if (html.includes('praxis-runtime-error')) {
-    return html
-  }
-
-  if (html.includes('</body>')) {
-    return html.replace('</body>', `${monitor}</body>`)
-  }
-
-  return `${html}${monitor}`
-}
-
 function stripHtmlFences(text: string) {
   const t = text.trim()
   // Remove leading ```html or ``` fence
@@ -385,43 +630,155 @@ function estimateTokens(text: string) {
   return Math.max(1, Math.ceil(String(text || '').length / 4))
 }
 
-async function measureContentSize(windowId: string, signal: AbortSignal): Promise<{ width: number; height: number } | null> {
-  return new Promise<{ width: number; height: number } | null>((resolve) => {
-    const handler = (e: MessageEvent) => {
-      const data = e.data as { type?: string; windowId?: string; width?: number; height?: number }
-      if (data?.type === 'praxis-measured-size' && data.windowId === windowId) {
-        window.removeEventListener('message', handler)
-        resolve({ width: data.width!, height: data.height! })
-      }
-    }
-    window.addEventListener('message', handler)
-
-    // Timeout after 2 seconds — fall back to default size
-    const timeout = setTimeout(() => {
-      window.removeEventListener('message', handler)
-      resolve(null)
-    }, 2000)
-
-    // Dispatch a custom event that the iframe can listen for
-    // The iframe will measure its content and post back the size
-    // We rely on the runtime monitor script already being injected
-    // Just wait a bit and if no response, resolve null
-    signal.addEventListener('abort', () => {
-      clearTimeout(timeout)
-      window.removeEventListener('message', handler)
-      resolve(null)
-    })
-  })
+function notifyBuildStart() {
+  window.dispatchEvent(new Event('praxis-build-start'))
 }
 
-function boundsForWindowSize(size: AppSpec['window_size']) {
-  if (size === 'small') {
-    return { width: 440, height: 320 }
+
+export function startProviderPreview(options: {
+  win: AppWindow
+  spec: AppSpec
+  provider: 'fast' | 'slow'
+  onUpdate: (id: string, patch: Partial<AppWindow>) => void
+  onStatus: (id: string, status: GenerationStatus) => void
+  onHtml: (id: string, html: string) => void
+}): LiveGenHandle {
+  const controller = new AbortController()
+
+  void runProviderPreview(options, controller.signal)
+
+  return {
+    windowId: options.win.id,
+    cancel: () => controller.abort(),
+  }
+}
+
+async function runProviderPreview(
+  options: {
+    win: AppWindow
+    spec: AppSpec
+    provider: 'fast' | 'slow'
+    onUpdate: (id: string, patch: Partial<AppWindow>) => void
+    onStatus: (id: string, status: GenerationStatus) => void
+    onHtml: (id: string, html: string) => void
+  },
+  signal: AbortSignal,
+) {
+  const { win, spec, provider, onUpdate, onStatus, onHtml } = options
+
+  try {
+    onStatus(win.id, 'building')
+
+    let currentBounds = defaultWindowBoundsForSpec(spec, win.bounds)
+    onUpdate(win.id, { spec, bounds: currentBounds })
+
+    let html = ''
+    let lastSizeUpdateAt = 0
+
+    for await (const chunk of buildStream(spec, signal, provider)) {
+      html += chunk
+      onHtml(win.id, html)
+
+      const now = Date.now()
+      if (now - lastSizeUpdateAt > 400) {
+        lastSizeUpdateAt = now
+        currentBounds = applyBuildSizeUpdate(spec, html, currentBounds)
+        onUpdate(win.id, { bounds: currentBounds })
+      }
+    }
+
+    html = stripHtmlFences(html)
+    html = await ensureValidHtml(html, 'Generated HTML failed validation.', signal)
+    html = await finalizeForPublish({
+      win,
+      spec,
+      html,
+      onUpdate,
+      onStatus,
+      signal,
+    })
+    onHtml(win.id, html)
+    onStatus(win.id, 'ready')
+  } catch (error) {
+    if (signal.aborted) {
+      return
+    }
+
+    onStatus(win.id, 'error')
+    onHtml(win.id, buildErrorDocument(error instanceof Error ? error.message : 'Generation failed'))
+  }
+}
+
+async function runSlowBenchmark(
+  spec: AppSpec,
+  parentSignal: AbortSignal,
+  onSlowTokens: (tokPerSec: number) => void,
+) {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), SLOW_BENCHMARK_MS)
+  const onParentAbort = () => controller.abort()
+
+  parentSignal.addEventListener('abort', onParentAbort)
+
+  const startClientMock = () => {
+    let rate = 24
+    const mock = window.setInterval(() => {
+      if (controller.signal.aborted) {
+        return
+      }
+      rate += 4
+      onSlowTokens(rate)
+    }, 320)
+    controller.signal.addEventListener('abort', () => window.clearInterval(mock))
   }
 
-  if (size === 'large') {
-    return { width: 760, height: 520 }
-  }
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/speed-compare/live`, {
+      method: 'POST',
+      headers: {
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ spec }),
+      signal: controller.signal,
+    })
 
-  return { width: 560, height: 400 }
+    if (!res.ok || !res.body) {
+      startClientMock()
+      return
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let gotSlow = false
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const events = buffer.split('\n\n')
+      buffer = events.pop() ?? ''
+
+      for (const event of events) {
+        const parsed = parseSseEvent(event)
+        if (typeof parsed.tokenPerSec === 'number' && parsed.tokenPerSec > 0) {
+          gotSlow = true
+          onSlowTokens(parsed.tokenPerSec)
+        }
+      }
+    }
+
+    if (!gotSlow) {
+      startClientMock()
+    }
+  } catch {
+    if (!controller.signal.aborted) {
+      startClientMock()
+    }
+  } finally {
+    window.clearTimeout(timeout)
+    parentSignal.removeEventListener('abort', onParentAbort)
+  }
 }

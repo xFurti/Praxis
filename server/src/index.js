@@ -6,7 +6,11 @@ import { handleVision } from './routes/vision.js'
 import { handleInterpret } from './routes/interpret.js'
 import { handleBuild } from './routes/build.js'
 import { handleFix } from './routes/fix.js'
+import { handleRefine } from './routes/refine.js'
 import { handleSpeedCompare } from './routes/speedCompare.js'
+import { handleSpeedCompareLive } from './routes/speedCompareLive.js'
+import { handleVerifySpec, handleVerifyPublish } from './routes/verify.js'
+import { handleLearnRecord, handleLearnSizes } from './routes/learn.js'
 import { handleProviderCapabilities } from './routes/providerCapabilities.js'
 
 const app = express()
@@ -24,6 +28,12 @@ app.post('/api/interpret', handleInterpret)
 app.post('/api/build', handleBuild)
 app.post('/api/fix', handleFix)
 app.get('/api/speed-compare', handleSpeedCompare)
+app.post('/api/speed-compare/live', handleSpeedCompareLive)
+app.post('/api/refine', handleRefine)
+app.post('/api/verify/spec', handleVerifySpec)
+app.post('/api/verify/publish', handleVerifyPublish)
+app.post('/api/learn/record', handleLearnRecord)
+app.get('/api/learn/sizes', handleLearnSizes)
 app.get('/api/provider-capabilities', handleProviderCapabilities)
 
 app.use((err, _req, res, _next) => {

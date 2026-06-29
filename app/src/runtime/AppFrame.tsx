@@ -1,5 +1,7 @@
 import type { AppWindow } from '../data/types'
 import { useInteraction } from '../windows/interactionContext'
+import { GenerationPlaceholder } from './GenerationPlaceholder'
+import { StreamingOverlay } from './StreamingOverlay'
 
 type AppFrameProps = {
   win: AppWindow
@@ -17,18 +19,19 @@ export function AppFrame({ win }: AppFrameProps) {
   const { interacting } = useInteraction()
   const building =
     win.status === 'building' || win.status === 'interpreting' || win.status === 'fixing'
+  const verifying = win.status === 'verifying'
 
-  if (building && !win.html) {
-    return <GenerationPlaceholder />
+  if ((building && !win.html) || verifying) {
+    return <GenerationPlaceholder status={verifying ? 'verifying' : win.status} />
   }
 
-  // Use a key that changes when generation completes so React fully remounts
-  // the iframe rather than mutating srcDoc on the existing DOM node.
-  // Browsers don't reliably re-render when srcdoc is updated on an already-loaded iframe.
-  const iframeKey = win.status === 'ready' ? `${win.id}-ready` : win.id
+  const iframeKey =
+    win.status === 'ready' || win.status === 'error'
+      ? `${win.id}-final-${win.html.length}`
+      : `${win.id}-streaming`
 
   return (
-    <div className="absolute inset-0">
+    <div className="absolute inset-0 overflow-hidden">
       <iframe
         key={iframeKey}
         title={win.title}
@@ -37,20 +40,7 @@ export function AppFrame({ win }: AppFrameProps) {
         sandbox="allow-scripts allow-forms allow-popups allow-modals"
         style={{ pointerEvents: interacting ? 'none' : 'auto' }}
       />
-      {building && (
-        <div className="pointer-events-none absolute inset-0 praxis-streaming" aria-hidden="true" />
-      )}
-    </div>
-  )
-}
-
-function GenerationPlaceholder() {
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-praxis-muted">
-      <div className="h-2 w-2/3 overflow-hidden rounded-full bg-praxis-surface2">
-        <div className="h-full w-1/3 praxis-streaming" />
-      </div>
-      <p className="text-xs">Writing your app…</p>
+      {building && win.html && <StreamingOverlay status={win.status} />}
     </div>
   )
 }

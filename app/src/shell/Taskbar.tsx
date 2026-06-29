@@ -47,7 +47,7 @@ function StatusDot({ status }: { status: AppWindow['status'] }) {
       ? 'bg-praxis-cyan'
       : status === 'error'
         ? 'bg-red-400'
-        : status === 'building' || status === 'interpreting' || status === 'fixing'
+        : status === 'building' || status === 'interpreting' || status === 'verifying' || status === 'fixing'
           ? 'bg-praxis-violet animate-pulse-soft'
           : 'bg-praxis-edge'
   return <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${color}`} />

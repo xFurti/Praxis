@@ -1,5 +1,6 @@
 import { callModel } from '../callModel.js'
-import { BUILDER_SYSTEM_PROMPT } from '../praxisPrompts.js'
+import { buildBuilderSystemPrompt } from '../styleDirector.js'
+import { getProviderConfigs } from '../providerConfig.js'
 
 /** POST /api/build
  *  Body: { spec: object }
@@ -8,7 +9,7 @@ import { BUILDER_SYSTEM_PROMPT } from '../praxisPrompts.js'
  */
 export async function handleBuild(req, res, next) {
   try {
-    const { spec } = req.body
+    const { spec, provider: providerId } = req.body
     if (!spec) {
       return res.status(400).json({ error: 'spec is required' })
     }
@@ -16,11 +17,12 @@ export async function handleBuild(req, res, next) {
     const messages = [
       {
         role: 'system',
-        content: BUILDER_SYSTEM_PROMPT,
+        content: await buildBuilderSystemPrompt(spec, { providerId }),
       },
       { role: 'user', content: JSON.stringify(spec) },
     ]
 
+    const providerOpts = resolveProviderOpts(providerId)
     const streaming = req.headers.accept?.includes('text/event-stream')
 
     if (streaming) {
@@ -29,7 +31,7 @@ export async function handleBuild(req, res, next) {
       res.setHeader('Connection', 'keep-alive')
 
       try {
-        const chunks = await callModel({ role: 'builder', messages, stream: true })
+        const chunks = await callModel({ role: 'builder', messages, stream: true, ...providerOpts })
         if (typeof chunks[Symbol.asyncIterator] === 'function') {
           for await (const chunk of chunks) {
             res.write(`data: ${JSON.stringify({ chunk })}\n\n`)
@@ -45,10 +47,28 @@ export async function handleBuild(req, res, next) {
         res.end()
       }
     } else {
-      const html = await callModel({ role: 'builder', messages })
+      const html = await callModel({ role: 'builder', messages, ...providerOpts })
       res.json({ html })
     }
   } catch (err) {
     next(err)
+  }
+}
+
+function resolveProviderOpts(providerId) {
+  if (providerId !== 'fast' && providerId !== 'slow') {
+    return {}
+  }
+
+  const cfg = getProviderConfigs().find((item) => item.id === providerId)
+  if (!cfg) {
+    return {}
+  }
+
+  return {
+    provider: cfg.provider,
+    model: cfg.model,
+    apiKey: cfg.apiKey,
+    baseUrl: cfg.baseUrl,
   }
 }

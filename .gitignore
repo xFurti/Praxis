@@ -17,6 +17,8 @@ out/
 .vite/
 *.tsbuildinfo
 
+server/data/
+
 # Logs / temp
 *.log
 tmp/

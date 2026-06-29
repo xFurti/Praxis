@@ -5,7 +5,14 @@ export type WindowBounds = {
   height: number
 }
 
-export type GenerationStatus = 'idle' | 'interpreting' | 'building' | 'ready' | 'error' | 'fixing'
+export type GenerationStatus =
+  | 'idle'
+  | 'interpreting'
+  | 'building'
+  | 'verifying'
+  | 'ready'
+  | 'error'
+  | 'fixing'
 
 export type FixEntry = {
   at: string
@@ -32,12 +39,33 @@ export type UserPromptRequest = {
   screenshot?: string
 }
 
+export type AppDesign = {
+  style_source: 'user' | 'inferred' | 'auto'
+  theme_id?: string
+  theme_name?: string
+  layout?: string
+  personality?: string
+  ux_notes?: string
+  palette?: {
+    background?: string
+    background_alt?: string
+    surface?: string
+    accent?: string
+    accent_secondary?: string
+    text?: string
+    muted?: string
+    color_scheme?: 'dark' | 'light'
+    [key: string]: string | undefined
+  }
+}
+
 export type AppSpec = {
   app_name: string
   description: string
   components: string[]
   logic: string
   window_size: 'small' | 'medium' | 'large'
+  design?: AppDesign
 }
 
 export type GenerationResult = {
